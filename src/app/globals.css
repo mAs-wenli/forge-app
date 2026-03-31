@@ -1,0 +1,14 @@
+:root {
+  --fc: 'Crimson Pro', serif;
+  --fj: 'Plus Jakarta Sans', sans-serif;
+  --fm: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0A0C13; color: #E4E2DC; font-family: var(--fj); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #232738; border-radius: 2px; }
+::placeholder { color: #5A5850; }
+input:focus, textarea:focus { outline: none; border-color: #C8793F !important; }
