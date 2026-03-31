@@ -3,6 +3,7 @@ import "./globals.css";
 export const metadata = {
   title: "FORGE",
   description: "自己変革プラットフォーム",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
 };
 
 export default function RootLayout({ children }) {

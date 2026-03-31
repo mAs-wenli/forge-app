@@ -375,7 +375,7 @@ export default function ForgePage() {
   </div>);
 
   // ═══════ MIRROR ═══════
-  const MirrorView = () => (<div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
+  const MirrorView = () => (<div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 80px)" }}>
     <div style={{ marginBottom: 12 }}><h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Mirror</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>ありのままを映す。事実だけ。</div></div>
     {data.forge.goalWeek && (<div style={{ background: T.surface, border: "1px solid "+T.border, borderLeft: "3px solid "+T.teal, borderRadius: 6, padding: "6px 10px", marginBottom: 10, fontSize: 10, color: T.textMuted }}><span style={{ color: T.teal, fontWeight: 600, marginRight: 6, fontSize: 9, textTransform: "uppercase" }}>今週</span>{data.forge.goalWeek}</div>)}
     <div style={{ flex: 1, overflowY: "auto", padding: "4px 0", minHeight: 200 }}>
@@ -455,10 +455,20 @@ export default function ForgePage() {
   };
 
   // ═══════ LAYOUT ═══════
-  return (<div style={{ background: T.bg, minHeight: "100vh", display: "flex", fontFamily: "var(--fj)", color: T.text }}>
-    <nav style={{ width: 56, flexShrink: 0, background: T.surface, borderRight: "1px solid "+T.border, display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0", gap: 4 }}>
+  const navItem = (n) => (
+    <div key={n.id} onClick={() => setSection(n.id)} title={n.label} style={{
+      width: 38, height: 38, borderRadius: 8, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", cursor: "pointer",
+      background: section===n.id ? T.accentDim : "transparent",
+      color: section===n.id ? T.accent : T.textDim, fontSize: 14,
+    }}><span>{n.icon}</span><span style={{ fontSize: 7, marginTop: 1 }}>{n.label}</span></div>
+  );
+
+  return (<div className="forge-shell">
+    {/* Desktop sidebar */}
+    <nav className="forge-sidebar">
       <div style={{ fontSize: 18, marginBottom: 16, color: T.accent, fontWeight: 600, fontFamily: "var(--fc)" }}>F</div>
-      {NAV.map(n => (<div key={n.id} onClick={() => setSection(n.id)} title={n.label} style={{ width: 38, height: 38, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: section===n.id ? T.accentDim : "transparent", color: section===n.id ? T.accent : T.textDim, fontSize: 14 }}><span>{n.icon}</span><span style={{ fontSize: 7, marginTop: 1 }}>{n.label}</span></div>))}
+      {NAV.map(navItem)}
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
         <div style={{ fontSize: 7, color: saveStatus==="saved" ? T.green : saveStatus==="saving" ? T.morning : saveStatus==="error" ? T.red : "transparent", textAlign: "center", lineHeight: 1.2 }}>
           {saveStatus==="saved" ? "保存済✓" : saveStatus==="saving" ? "保存中" : saveStatus==="error" ? "失敗" : "　"}
@@ -466,12 +476,28 @@ export default function ForgePage() {
         <button onClick={logout} title="ログアウト" style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 10, padding: 4 }}>↩</button>
       </div>
     </nav>
-    <main style={{ flex: 1, padding: "24px 28px", maxWidth: 660, overflowY: "auto" }}>
+
+    {/* Main content */}
+    <main className="forge-main">
       {section==="today" && TodayView()}
       {section==="foundation" && FoundationView()}
       {section==="mirror" && MirrorView()}
       {section==="history" && HistoryView()}
     </main>
+
+    {/* Mobile bottom nav */}
+    <nav className="forge-bottomnav">
+      {NAV.map(n => (
+        <div key={n.id} onClick={() => setSection(n.id)} style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+          padding: "6px 12px", cursor: "pointer",
+          color: section===n.id ? T.accent : T.textDim,
+        }}>
+          <span style={{ fontSize: 18 }}>{n.icon}</span>
+          <span style={{ fontSize: 9 }}>{n.label}</span>
+        </div>
+      ))}
+    </nav>
   </div>);
 }
 

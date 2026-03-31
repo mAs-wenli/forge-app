@@ -33,8 +33,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg }}>
-      <div style={{ width: 360, padding: 32, background: T.surface, border: "1px solid " + T.border, borderRadius: 16 }}>
+    <div style={{ minHeight: "100vh", minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, padding: "16px" }}>
+      <div style={{ width: "100%", maxWidth: 360, padding: 32, background: T.surface, border: "1px solid " + T.border, borderRadius: 16 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontSize: 36, fontWeight: 600, color: T.accent, fontFamily: "var(--fc)" }}>F</div>
           <div style={{ fontSize: 14, color: T.text, marginTop: 4, fontFamily: "var(--fc)" }}>FORGE</div>

@@ -12,3 +12,28 @@ body { background: #0A0C13; color: #E4E2DC; font-family: var(--fj); }
 ::-webkit-scrollbar-thumb { background: #232738; border-radius: 2px; }
 ::placeholder { color: #5A5850; }
 input:focus, textarea:focus { outline: none; border-color: #C8793F !important; }
+
+/* Responsive layout */
+.forge-shell { display: flex; min-height: 100vh; min-height: 100dvh; }
+.forge-sidebar {
+  width: 56px; flex-shrink: 0; background: #12151E; border-right: 1px solid #232738;
+  display: flex; flex-direction: column; align-items: center; padding: 18px 0; gap: 4px;
+}
+.forge-bottomnav { display: none; }
+.forge-main {
+  flex: 1; padding: 24px 28px; max-width: 720px; overflow-y: auto;
+  margin: 0 auto; width: 100%;
+}
+
+@media (max-width: 640px) {
+  .forge-shell { flex-direction: column; }
+  .forge-sidebar { display: none; }
+  .forge-bottomnav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: #12151E; border-top: 1px solid #232738;
+    padding: 6px 0 env(safe-area-inset-bottom, 8px); justify-content: space-around;
+  }
+  .forge-main {
+    padding: 16px 16px 80px; max-width: 100%;
+  }
+}
