@@ -42,6 +42,8 @@ export default function ForgePage() {
   const [historyDate, setHistoryDate] = useState(null);
   const [historyMonth, setHistoryMonth] = useState(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); });
   const [expandedDomain, setExpandedDomain] = useState(null);
+  const [editingDomainHeader, setEditingDomainHeader] = useState(null);
+  const [domainHeaderDraft, setDomainHeaderDraft] = useState({ name: "", emoji: "" });
   const [addingDomain, setAddingDomain] = useState(false);
   const [newDomain, setNewDomain] = useState({ name: "", emoji: "", color: DOMAIN_COLORS[0] });
 
@@ -432,13 +434,21 @@ export default function ForgePage() {
 
     {domains.map(d => {
       const isExp = expandedDomain === d.id;
+      const isEditingHeader = editingDomainHeader === d.id;
       const filled = [d.vision, d.goal1year, d.goalQuarter, d.goalMonth, d.goalWeek].filter(Boolean).length;
       return (<div key={d.id} style={{ marginBottom: 8 }}>
-        <div onClick={() => setExpandedDomain(isExp ? null : d.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.surface, border: "1px solid " + (isExp ? d.color + "40" : T.border), borderRadius: isExp ? "10px 10px 0 0" : 10, cursor: "pointer" }}>
-          <span style={{ fontSize: 16 }}>{d.emoji}</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: d.color, flex: 1 }}>{d.name}</span>
-          <span style={{ fontSize: 10, color: T.textDim }}>{filled}/5</span>
-          <span style={{ fontSize: 10, color: T.textDim }}>{isExp ? "▼" : "▶"}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.surface, border: "1px solid " + (isExp ? d.color + "40" : T.border), borderRadius: isExp ? "10px 10px 0 0" : 10 }}>
+          {isEditingHeader ? (<>
+            <input value={domainHeaderDraft.emoji} onChange={e => setDomainHeaderDraft(p => ({...p, emoji: e.target.value}))} style={{ ...inputBase, width: 40, textAlign: "center", padding: "4px" }} maxLength={2} />
+            <input value={domainHeaderDraft.name} onChange={e => setDomainHeaderDraft(p => ({...p, name: e.target.value}))} style={{ ...inputBase, flex: 1, padding: "4px 8px" }} autoFocus onKeyDown={e => { if (e.key === "Enter") { updateDomains(ds => ds.map(x => x.id === d.id ? { ...x, name: domainHeaderDraft.name, emoji: domainHeaderDraft.emoji || "◆" } : x)); setEditingDomainHeader(null); } }} />
+            <button onClick={() => { updateDomains(ds => ds.map(x => x.id === d.id ? { ...x, name: domainHeaderDraft.name, emoji: domainHeaderDraft.emoji || "◆" } : x)); setEditingDomainHeader(null); }} style={{ ...btnSm, color: T.green, fontSize: 11 }}>✓</button>
+            <button onClick={() => setEditingDomainHeader(null)} style={{ ...btnSm, color: T.textDim, fontSize: 11 }}>×</button>
+          </>) : (<>
+            <span onClick={(e) => { e.stopPropagation(); setEditingDomainHeader(d.id); setDomainHeaderDraft({ name: d.name, emoji: d.emoji }); }} style={{ fontSize: 16, cursor: "pointer" }}>{d.emoji}</span>
+            <span onClick={(e) => { e.stopPropagation(); setEditingDomainHeader(d.id); setDomainHeaderDraft({ name: d.name, emoji: d.emoji }); }} style={{ fontSize: 14, fontWeight: 500, color: d.color, flex: 1, cursor: "pointer" }}>{d.name}</span>
+            <span style={{ fontSize: 10, color: T.textDim }}>{filled}/5</span>
+            <span onClick={() => setExpandedDomain(isExp ? null : d.id)} style={{ fontSize: 10, color: T.textDim, cursor: "pointer", padding: "4px 8px" }}>{isExp ? "▼" : "▶"}</span>
+          </>)}
         </div>
         {isExp && (<div style={{ background: T.surfaceAlt, border: "1px solid " + T.border, borderTop: "none", borderRadius: "0 0 10px 10px", padding: "14px 18px" }}>
           {renderEditableCard("Vision", d.vision, "domain:" + d.id + ":vision", d.color, "この領域で目指す姿", true)}
