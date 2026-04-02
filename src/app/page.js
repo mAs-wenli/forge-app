@@ -295,7 +295,17 @@ export default function ForgePage() {
       </div>
 
       {todayPhase === "morning" && (<div>
-        {dl.morningDone ? (<div style={{ textAlign: "center", padding: "24px 16px", color: T.textDim }}><div style={{ color: T.green, fontSize: 20, marginBottom: 6 }}>✓</div><div style={{ fontSize: 13, fontFamily: "var(--fc)" }}>Morning 完了</div></div>
+        {dl.morningDone ? (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ color: T.green, fontSize: 14 }}>✓</span><span style={{ fontSize: 13, color: T.textMuted }}>Morning 完了</span></div>
+            <button onClick={() => updateDailyLog(selectedDate, { morningDone: false })} style={{ ...btnSm, color: T.textDim, border: "1px solid " + T.border, padding: "3px 10px" }}>修正する</button>
+          </div>
+          {dl.gratitude && <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 8, padding: "6px 10px", background: T.surface, borderRadius: 6 }}><span style={{ color: T.morning, fontSize: 9, fontWeight: 600, marginRight: 6 }}>感謝</span>{dl.gratitude}</div>}
+          {dl.top3 && dl.top3.map((task, idx) => (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}>
+            <span style={{ fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 16, textAlign: "center", flexShrink: 0 }}>{idx+1}</span>
+            <span style={{ color: task.status === "done" ? T.textDim : T.text, textDecoration: task.status === "done" ? "line-through" : "none" }}>{task.text}</span>
+          </div>))}
+        </div>
         ) : (<div>
           {renderGoalTree()}
           <div style={{ marginBottom: 12 }}><input value={gratitudeDraft} onChange={e => setGratitudeDraft(e.target.value)} placeholder="今朝、感謝していることは？（任意）" style={{ ...inputBase, width: "100%", fontSize: 12 }} /></div>
@@ -350,7 +360,18 @@ export default function ForgePage() {
       </div>)}
 
       {todayPhase === "evening" && (<div>
-        {dl.eveningDone ? (<div style={{ textAlign: "center", padding: "24px 16px", color: T.textDim }}><div style={{ color: T.green, fontSize: 20, marginBottom: 6 }}>✓</div><div style={{ fontSize: 13, fontFamily: "var(--fc)" }}>Evening 完了</div></div>
+        {dl.eveningDone ? (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ color: T.green, fontSize: 14 }}>✓</span><span style={{ fontSize: 13, color: T.textMuted }}>Evening 完了</span></div>
+            <button onClick={() => updateDailyLog(selectedDate, { eveningDone: false })} style={{ ...btnSm, color: T.textDim, border: "1px solid " + T.border, padding: "3px 10px" }}>修正する</button>
+          </div>
+          {dl.top3 && dl.top3.map((task, idx) => (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}>
+            <span style={{ color: statusColors[task.status] }}>{statusIcons[task.status]}</span>
+            <span style={{ color: task.status === "done" ? T.textDim : T.text, textDecoration: task.status === "done" ? "line-through" : "none" }}>{task.text}</span>
+          </div>))}
+          {dl.journal && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 8, padding: "6px 10px", background: T.surface, borderRadius: 6, borderLeft: "2px solid " + T.evening }}><span style={{ color: T.evening, fontSize: 9, fontWeight: 600, marginRight: 6 }}>Journal</span>{dl.journal}</div>}
+          {dl.visionCheck && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4, fontStyle: "italic" }}>{dl.visionCheck}</div>}
+        </div>
         ) : (<div>
           {dl.top3 && dl.top3.length > 0 && (<div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 10 }}>今日の Top 3 はどうでしたか？</div>
