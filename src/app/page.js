@@ -15,9 +15,10 @@ const T = {
 };
 
 const gid = () => "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const todayStr = () => new Date().toISOString().split("T")[0];
+const toDateStr = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+const todayStr = () => toDateStr(new Date());
 const timeNow = () => { const d = new Date(); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
-const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; };
+const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return toDateStr(d); };
 const dayLabel = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); return (d.getMonth()+1) + "/" + d.getDate() + " (" + ["日","月","火","水","木","金","土"][d.getDay()] + ")"; };
 
 export default function ForgePage() {
@@ -97,7 +98,7 @@ export default function ForgePage() {
   };
 
   const completeEvening = () => {
-    const nextDay = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
+    const nextDay = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
     setData(d => {
       const log = { ...(d.forge.dailyLog || {}) };
       const dayLog = { ...(log[selectedDate] || {}), journal: journalDraft, visionCheck: visionCheckDraft, eveningDone: true };
@@ -172,7 +173,7 @@ export default function ForgePage() {
   const statusColors = { done: T.green, partial: T.morning, undone: T.red };
   const dl = getDailyLog(selectedDate);
   const isViewingToday = selectedDate === todayStr();
-  const shiftDate = (days) => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + days); setSelectedDate(d.toISOString().split("T")[0]); };
+  const shiftDate = (days) => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + days); setSelectedDate(toDateStr(d)); };
 
   // ── Render helpers ──
   const renderEditableCard = (label, value, field, accent, placeholder, multiline, question) => (
@@ -213,7 +214,7 @@ export default function ForgePage() {
     const dotDays = [];
     for (let i = 13; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const ds = d.toISOString().split("T")[0]; const ddl = getDailyLog(ds); const isToday = ds === todayStr();
+      const ds = toDateStr(d); const ddl = getDailyLog(ds); const isToday = ds === todayStr();
       let level = 0;
       if (ddl.morningDone) { level = 1; if (ddl.top3) { const done = ddl.top3.filter(t => t.status === "done").length; if (done > 0 && done < ddl.top3.length) level = 2; else if (done === ddl.top3.length) level = 3; } if (ddl.eveningDone && level >= 3) level = 4; }
       dotDays.push({ date: ds, day: d.getDate(), dow: ["日","月","火","水","木","金","土"][d.getDay()], level, isToday });
