@@ -53,11 +53,18 @@ export function useForgeData() {
           if (!d.forge) d.forge = defaultForge;
           if (!d.mirror) d.mirror = defaultMirror;
           if (!d.forge.dailyLog) d.forge.dailyLog = {};
-          if (!d.forge.goal1year) d.forge.goal1year = d.mirror?.goal || "";
-          if (!d.forge.goalQuarter) d.forge.goalQuarter = "";
-          if (!d.forge.goalMonth) d.forge.goalMonth = "";
-          if (!d.forge.goalWeek) d.forge.goalWeek = "";
           if (!d.forge.patternInterrupts) d.forge.patternInterrupts = defaultForge.patternInterrupts;
+          // Migrate old goal hierarchy into a domain if domains don't exist yet
+          if (!d.forge.domains) {
+            d.forge.domains = [];
+            if (d.forge.goal1year || d.forge.goalQuarter || d.forge.goalMonth || d.forge.goalWeek) {
+              d.forge.domains.push({
+                id: "migrated", name: "メイン", emoji: "◆", color: "#C8793F",
+                vision: "", goal1year: d.forge.goal1year || "", goalQuarter: d.forge.goalQuarter || "",
+                goalMonth: d.forge.goalMonth || "", goalWeek: d.forge.goalWeek || "",
+              });
+            }
+          }
           setData(d);
         } else {
           // First time: create initial row
