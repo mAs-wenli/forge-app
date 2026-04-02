@@ -32,6 +32,7 @@ export default function ForgePage() {
   const [logTag, setLogTag] = useState("unknown");
   const chatEndRef = useRef(null);
   const [todayPhase, setTodayPhase] = useState("day");
+  const [selectedDate, setSelectedDate] = useState(todayStr);
   const [top3Draft, setTop3Draft] = useState(["", "", ""]);
   const [gratitudeDraft, setGratitudeDraft] = useState("");
   const [journalDraft, setJournalDraft] = useState("");
@@ -39,21 +40,22 @@ export default function ForgePage() {
   const [historyDate, setHistoryDate] = useState(null);
   const [historyMonth, setHistoryMonth] = useState(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); });
 
-  // Restore drafts from loaded data
+  // Restore drafts when data loads or selectedDate changes
   useEffect(() => {
     if (!data) return;
-    const dl = (data.forge.dailyLog || {})[todayStr()] || {};
+    const dl = (data.forge.dailyLog || {})[selectedDate] || {};
     if (dl.top3) setTop3Draft(dl.top3.map(t => t.text).concat(["","",""]).slice(0,3));
-    if (dl.gratitude) setGratitudeDraft(dl.gratitude);
-    if (dl.journal) setJournalDraft(dl.journal);
-    if (dl.visionCheck) setVisionCheckDraft(dl.visionCheck);
+    else setTop3Draft(["", "", ""]);
+    setGratitudeDraft(dl.gratitude || "");
+    setJournalDraft(dl.journal || "");
+    setVisionCheckDraft(dl.visionCheck || "");
     setTodayPhase(dl.morningDone ? "day" : "morning");
-    // Mirror messages
-    if (data.mirror?.dialogueHistory?.length > 0) {
+    // Mirror messages only for actual today
+    if (selectedDate === todayStr() && data.mirror?.dialogueHistory?.length > 0) {
       const latest = data.mirror.dialogueHistory[data.mirror.dialogueHistory.length - 1];
       if (latest.date === todayStr()) setMirrorMessages(latest.messages || []);
     }
-  }, [data?.forge?.dailyLog === undefined]); // only on first load
+  }, [selectedDate, !data]);
 
   // ── State helpers ──
   const updateForge = (k, v) => setData(d => ({ ...d, forge: { ...d.forge, [k]: v } }));
@@ -78,32 +80,32 @@ export default function ForgePage() {
 
   const addLog = (text, tag) => {
     const t = text || logInput; if (!t.trim()) return;
-    updateForge("actionLog", [...(data.forge.actionLog || []), { id: gid(), date: todayStr(), time: timeNow(), text: t.trim(), tag: tag || logTag }]);
+    updateForge("actionLog", [...(data.forge.actionLog || []), { id: gid(), date: selectedDate, time: timeNow(), text: t.trim(), tag: tag || logTag }]);
     if (!text) { setLogInput(""); setLogTag("unknown"); }
   };
 
   const completeMorning = () => {
     const tasks = top3Draft.filter(t => t.trim()).map((text, i) => ({ id: "t" + (i+1), text: text.trim(), status: "undone" }));
     if (tasks.length === 0) return;
-    updateDailyLog(todayStr(), { top3: tasks, gratitude: gratitudeDraft, morningDone: true });
+    updateDailyLog(selectedDate, { top3: tasks, gratitude: gratitudeDraft, morningDone: true });
     setTodayPhase("day");
   };
 
   const updateTop3Status = (idx, status) => {
-    const dl = getDailyLog(); if (!dl.top3) return;
-    updateDailyLog(todayStr(), { top3: dl.top3.map((t, i) => i === idx ? { ...t, status } : t) });
+    const dl = getDailyLog(selectedDate); if (!dl.top3) return;
+    updateDailyLog(selectedDate, { top3: dl.top3.map((t, i) => i === idx ? { ...t, status } : t) });
   };
 
   const completeEvening = () => {
+    const nextDay = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
     setData(d => {
       const log = { ...(d.forge.dailyLog || {}) };
-      const todayLog = { ...(log[todayStr()] || {}), journal: journalDraft, visionCheck: visionCheckDraft, eveningDone: true };
-      log[todayStr()] = todayLog;
-      if (todayLog.top3) {
-        const undone = todayLog.top3.filter(t => t.status === "undone").map(t => t.text);
+      const dayLog = { ...(log[selectedDate] || {}), journal: journalDraft, visionCheck: visionCheckDraft, eveningDone: true };
+      log[selectedDate] = dayLog;
+      if (dayLog.top3) {
+        const undone = dayLog.top3.filter(t => t.status === "undone").map(t => t.text);
         if (undone.length > 0) {
-          const tmrw = tomorrowStr();
-          log[tmrw] = { ...(log[tmrw] || {}), top3: [...((log[tmrw] || {}).top3 || []), ...undone.map((text, i) => ({ id: "carry" + (i+1), text, status: "undone" }))] };
+          log[nextDay] = { ...(log[nextDay] || {}), top3: [...((log[nextDay] || {}).top3 || []), ...undone.map((text, i) => ({ id: "carry" + (i+1), text, status: "undone" }))] };
         }
       }
       return { ...d, forge: { ...d.forge, dailyLog: log } };
@@ -148,7 +150,7 @@ export default function ForgePage() {
     return data.forge.patternInterrupts.find(pi => pi.time > timeNow()) || null;
   }, [data, section, todayPhase]);
 
-  const todayLogs = useMemo(() => data ? (data.forge.actionLog || []).filter(l => l.date === todayStr()).reverse() : [], [data]);
+  const todayLogs = useMemo(() => data ? (data.forge.actionLog || []).filter(l => l.date === selectedDate).reverse() : [], [data, selectedDate]);
 
   const stats = useMemo(() => {
     if (!data) return { streak: 0, weekDone: 0, weekTotal: 0, pureCount: 0, fearCount: 0 };
@@ -168,7 +170,9 @@ export default function ForgePage() {
   const tagLabels = { pure: "純粋", fear: "恐怖", unknown: "不明" };
   const statusIcons = { done: "○", partial: "△", undone: "×" };
   const statusColors = { done: T.green, partial: T.morning, undone: T.red };
-  const dl = getDailyLog();
+  const dl = getDailyLog(selectedDate);
+  const isViewingToday = selectedDate === todayStr();
+  const shiftDate = (days) => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + days); setSelectedDate(d.toISOString().split("T")[0]); };
 
   // ── Render helpers ──
   const renderEditableCard = (label, value, field, accent, placeholder, multiline, question) => (
@@ -261,11 +265,24 @@ export default function ForgePage() {
 
   // ═══════ TODAY ═══════
   const TodayView = () => {
-    const date = new Date(); const dayNames = ["日","月","火","水","木","金","土"];
+    const selDate = new Date(selectedDate + "T00:00:00");
+    const dayNames = ["日","月","火","水","木","金","土"];
+    const dateLabel = selDate.getFullYear() + "." + String(selDate.getMonth()+1).padStart(2,"0") + "." + String(selDate.getDate()).padStart(2,"0") + " (" + dayNames[selDate.getDay()] + ")";
     return (<div>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: T.textDim, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{date.getFullYear()}.{String(date.getMonth()+1).padStart(2,"0")}.{String(date.getDate()).padStart(2,"0")} ({dayNames[date.getDay()]})</div>
-        <h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Today</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <button onClick={() => shiftDate(-1)} style={{ ...btnSm, color: T.textMuted, border: "1px solid " + T.border, padding: "4px 10px", fontSize: 14 }}>←</button>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: isViewingToday ? T.textDim : T.morning, letterSpacing: "0.1em", textTransform: "uppercase" }}>{dateLabel}</div>
+            <h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>{isViewingToday ? "Today" : dayLabel(selectedDate)}</h1>
+          </div>
+          <button onClick={() => shiftDate(1)} disabled={isViewingToday} style={{ ...btnSm, color: isViewingToday ? T.border : T.textMuted, border: "1px solid " + T.border, padding: "4px 10px", fontSize: 14, cursor: isViewingToday ? "default" : "pointer" }}>→</button>
+        </div>
+        {!isViewingToday && (
+          <div style={{ textAlign: "center" }}>
+            <button onClick={() => setSelectedDate(todayStr())} style={{ ...btnSm, color: T.accent, fontSize: 11, padding: "2px 10px", border: "1px solid " + T.accent + "44" }}>今日に戻る</button>
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid " + T.border }}>
         {[["morning","☀","Morning",T.morning,dl.morningDone],["day","◉","Day",T.accent,false],["evening","☽","Evening",T.evening,dl.eveningDone]].map(([id,icon,label,color,done]) => (
