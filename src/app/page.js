@@ -78,7 +78,7 @@ export default function ForgePage() {
     if (field === "vision" && data.forge.vision && data.forge.vision !== tempText) {
       const hist = [...(data.forge.visionHistory || []), { date: todayStr(), text: data.forge.vision }];
       setData(d => ({ ...d, forge: { ...d.forge, vision: tempText, visionHistory: hist } }));
-    } else if (["antiVision","identity","vision"].includes(field)) { updateForge(field, tempText); }
+    } else if (["antiVision","identity","vision","northStar","reasonForBeing","values"].includes(field)) { updateForge(field, tempText); }
     else if (field.startsWith("domain:")) {
       const [,domainId, key] = field.split(":");
       updateDomains(ds => ds.map(d => d.id === domainId ? { ...d, [key]: tempText } : d));
@@ -135,7 +135,7 @@ export default function ForgePage() {
     try {
       const domains = getDomains();
       const domainCtx = domains.map(d => d.name + ": " + (d.vision || "未設定")).join("\n");
-      const ctx = [data.forge.antiVision && ("Anti-Vision: " + data.forge.antiVision), data.forge.vision && ("Vision: " + data.forge.vision), data.forge.identity && ("Identity: " + data.forge.identity), domains.length > 0 && ("領域:\n" + domainCtx)].filter(Boolean).join("\n");
+      const ctx = [data.forge.northStar && ("北極星: " + data.forge.northStar), data.forge.reasonForBeing && ("存在意義: " + data.forge.reasonForBeing), data.forge.values && ("価値観: " + data.forge.values), data.forge.antiVision && ("Anti-Vision: " + data.forge.antiVision), data.forge.vision && ("Vision: " + data.forge.vision), data.forge.identity && ("Identity: " + data.forge.identity), domains.length > 0 && ("領域:\n" + domainCtx)].filter(Boolean).join("\n");
       const logs = (data.forge.actionLog || []).slice(-5).map(l => "[" + l.tag + "] " + l.text).join("\n");
       const dl = getDailyLog(); const t3 = dl.top3 ? dl.top3.map(t => { const dom = getDomain(t.domainId); return "[" + t.status + "]" + (dom ? " [" + dom.name + "]" : "") + " " + t.text; }).join("\n") : "";
       const weekDates = getDailyLogDates().filter(d => d !== todayStr()).slice(0, 7);
@@ -421,9 +421,15 @@ export default function ForgePage() {
 
   // ═══════ FOUNDATION ═══════
   const FoundationView = () => (<div>
-    <div style={{ marginBottom: 28 }}><h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Foundation</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>恐怖と方向。アイデンティティ。人生の領域。</div></div>
+    <div style={{ marginBottom: 28 }}><h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Foundation</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>自分の核心。恐怖と方向。人生の領域。</div></div>
 
-    <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Core</div>
+    <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Core — 不変の核</div>
+    <div style={{ fontSize: 11, color: T.textDim, marginBottom: 12, fontFamily: "var(--fc)", fontStyle: "italic" }}>全て任意。空でもいい。行動の蓄積から浮かび上がったときに書く。</div>
+    {renderEditableCard("北極星", data.forge.northStar, "northStar", T.accent, "自分の人生を一文で", false, "自分はどこに向かうのか？")}
+    {renderEditableCard("存在意義", data.forge.reasonForBeing, "reasonForBeing", "#7A2A10", "自分はなぜここにいるのか", true, "なぜ存在しているのか？何のために？")}
+    {renderEditableCard("価値観", data.forge.values, "values", "#534AB7", "自分が信じること、大切にすること", true, "何を信じ、何を大切にしているか？")}
+
+    <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 28, marginBottom: 10 }}>Core — 恐怖と方向</div>
     {renderEditableCard("Anti-Vision — 燃料", data.forge.antiVision, "antiVision", T.coral, "「絶対にこうなりたくない」を一文で", true)}
     {renderEditableCard("Vision — 方向", data.forge.vision, "vision", T.accent, "「自分はこれから何に向かうべきか」を一文で", true)}
     {renderEditableCard("Identity — 私は誰になるのか", data.forge.identity, "identity", T.teal, "理想を手にしたあなたはどんなタイプの人間か？", true)}

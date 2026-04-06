@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase-browser";
 
 const defaultForge = {
+  northStar: "", reasonForBeing: "", values: "",
   antiVision: "", vision: "", identity: "",
   visionHistory: [], actionLog: [],
   patternInterrupts: [
@@ -10,7 +11,6 @@ const defaultForge = {
     { id: "pi2", time: "15:00", question: "この行動は最悪な未来に向かっている？理想の未来に向かっている？" },
     { id: "pi3", time: "21:00", question: "今日いちばん生きていた瞬間は？死んでいた瞬間は？" },
   ],
-  goal1year: "", goalQuarter: "", goalMonth: "", goalWeek: "",
   dailyLog: {},
 };
 
