@@ -54,16 +54,30 @@ export function useForgeData() {
           if (!d.mirror) d.mirror = defaultMirror;
           if (!d.forge.dailyLog) d.forge.dailyLog = {};
           if (!d.forge.patternInterrupts) d.forge.patternInterrupts = defaultForge.patternInterrupts;
-          // Migrate old goal hierarchy into a domain if domains don't exist yet
+          // Migrate: create domains array if missing
           if (!d.forge.domains) {
             d.forge.domains = [];
             if (d.forge.goal1year || d.forge.goalQuarter || d.forge.goalMonth || d.forge.goalWeek) {
-              d.forge.domains.push({
-                id: "migrated", name: "メイン", emoji: "◆", color: "#C8793F",
-                vision: "", goal1year: d.forge.goal1year || "", goalQuarter: d.forge.goalQuarter || "",
-                goalMonth: d.forge.goalMonth || "", goalWeek: d.forge.goalWeek || "",
-              });
+              const goals = [];
+              if (d.forge.goal1year) goals.push({ id: "mg1", text: d.forge.goal1year, timeframe: "1year", status: "active", createdDate: "" });
+              if (d.forge.goalQuarter) goals.push({ id: "mg2", text: d.forge.goalQuarter, timeframe: "quarter", status: "active", createdDate: "" });
+              if (d.forge.goalMonth) goals.push({ id: "mg3", text: d.forge.goalMonth, timeframe: "month", status: "active", createdDate: "" });
+              if (d.forge.goalWeek) goals.push({ id: "mg4", text: d.forge.goalWeek, timeframe: "week", status: "active", createdDate: "" });
+              d.forge.domains.push({ id: "migrated", name: "メイン", emoji: "◆", color: "#C8793F", vision: "", goals });
             }
+          }
+          // Migrate: convert existing domains with flat goal fields to goals array
+          if (d.forge.domains) {
+            d.forge.domains = d.forge.domains.map(dom => {
+              if (dom.goals) return dom; // already migrated
+              const goals = [];
+              if (dom.goal1year) goals.push({ id: "mg1" + dom.id, text: dom.goal1year, timeframe: "1year", status: "active", createdDate: "" });
+              if (dom.goalQuarter) goals.push({ id: "mg2" + dom.id, text: dom.goalQuarter, timeframe: "quarter", status: "active", createdDate: "" });
+              if (dom.goalMonth) goals.push({ id: "mg3" + dom.id, text: dom.goalMonth, timeframe: "month", status: "active", createdDate: "" });
+              if (dom.goalWeek) goals.push({ id: "mg4" + dom.id, text: dom.goalWeek, timeframe: "week", status: "active", createdDate: "" });
+              const { goal1year, goalQuarter, goalMonth, goalWeek, ...rest } = dom;
+              return { ...rest, goals };
+            });
           }
           setData(d);
         } else {

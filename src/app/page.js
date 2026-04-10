@@ -12,9 +12,11 @@ const T = {
   coral: "#E8593C", coralDim: "rgba(232,89,60,0.10)",
   morning: "#D4A843", morningDim: "rgba(212,168,67,0.10)",
   evening: "#7B6BCC", eveningDim: "rgba(123,107,204,0.10)",
+  gold: "#D4A843",
 };
 
 const DOMAIN_COLORS = ["#6B8AFF","#C8793F","#E8593C","#4ADE80","#7B6BCC","#4A9E8E","#D4A843","#EF4444"];
+const TIMEFRAMES = [{id:"1year",label:"1年"},{id:"quarter",label:"四半期"},{id:"month",label:"今月"},{id:"week",label:"今週"},{id:"",label:"期限なし"}];
 
 const gid = () => "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const toDateStr = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
@@ -46,16 +48,18 @@ export default function ForgePage() {
   const [domainHeaderDraft, setDomainHeaderDraft] = useState({ name: "", emoji: "" });
   const [addingDomain, setAddingDomain] = useState(false);
   const [newDomain, setNewDomain] = useState({ name: "", emoji: "", color: DOMAIN_COLORS[0] });
+  const [addingGoalTo, setAddingGoalTo] = useState(null);
+  const [newGoal, setNewGoal] = useState({ text: "", timeframe: "" });
+  const [editingGoalId, setEditingGoalId] = useState(null);
+  const [editGoalDraft, setEditGoalDraft] = useState({ text: "", timeframe: "" });
+  const [showAchieved, setShowAchieved] = useState({});
 
-  // ── Restore drafts ──
   useEffect(() => {
     if (!data) return;
     const dl = (data.forge.dailyLog || {})[selectedDate] || {};
     if (dl.top3) setTop3Draft(dl.top3.map(t => ({text: t.text, domainId: t.domainId || ""})).concat([{text:"",domainId:""},{text:"",domainId:""},{text:"",domainId:""}]).slice(0,3));
     else setTop3Draft([{text:"",domainId:""},{text:"",domainId:""},{text:"",domainId:""}]);
-    setGratitudeDraft(dl.gratitude || "");
-    setJournalDraft(dl.journal || "");
-    setVisionCheckDraft(dl.visionCheck || "");
+    setGratitudeDraft(dl.gratitude || ""); setJournalDraft(dl.journal || ""); setVisionCheckDraft(dl.visionCheck || "");
     setTodayPhase(dl.morningDone ? "day" : "morning");
     if (selectedDate === todayStr() && data.mirror?.dialogueHistory?.length > 0) {
       const latest = data.mirror.dialogueHistory[data.mirror.dialogueHistory.length - 1];
@@ -72,6 +76,8 @@ export default function ForgePage() {
   const getDomains = () => (data && data.forge.domains) || [];
   const getDomain = (id) => getDomains().find(d => d.id === id);
   const updateDomains = (updater) => setData(d => ({ ...d, forge: { ...d.forge, domains: typeof updater === "function" ? updater(d.forge.domains || []) : updater } }));
+  const getActiveGoals = (domain) => (domain.goals || []).filter(g => g.status === "active");
+  const getAchievedGoals = (domain) => (domain.goals || []).filter(g => g.status === "achieved");
 
   const startEdit = (f, v) => { setEditField(f); setTempText(v || ""); };
   const saveEdit = (field) => {
@@ -92,37 +98,45 @@ export default function ForgePage() {
     if (!text) { setLogInput(""); setLogTag("unknown"); }
   };
 
+  // ── Domain goals ──
   const addDomain = () => {
     if (!newDomain.name.trim()) return;
-    updateDomains(ds => [...ds, { id: gid(), name: newDomain.name.trim(), emoji: newDomain.emoji || "◆", color: newDomain.color, vision: "", goal1year: "", goalQuarter: "", goalMonth: "", goalWeek: "" }]);
+    updateDomains(ds => [...ds, { id: gid(), name: newDomain.name.trim(), emoji: newDomain.emoji || "◆", color: newDomain.color, vision: "", goals: [] }]);
     setNewDomain({ name: "", emoji: "", color: DOMAIN_COLORS[(getDomains().length + 1) % DOMAIN_COLORS.length] });
     setAddingDomain(false);
   };
   const removeDomain = (id) => updateDomains(ds => ds.filter(d => d.id !== id));
+  const addGoal = (domainId) => {
+    if (!newGoal.text.trim()) return;
+    updateDomains(ds => ds.map(d => d.id === domainId ? { ...d, goals: [...(d.goals || []), { id: gid(), text: newGoal.text.trim(), timeframe: newGoal.timeframe, status: "active", createdDate: todayStr() }] } : d));
+    setNewGoal({ text: "", timeframe: "" }); setAddingGoalTo(null);
+  };
+  const achieveGoal = (domainId, goalId) => {
+    updateDomains(ds => ds.map(d => d.id === domainId ? { ...d, goals: (d.goals || []).map(g => g.id === goalId ? { ...g, status: "achieved", achievedDate: todayStr() } : g) } : d));
+  };
+  const reactivateGoal = (domainId, goalId) => {
+    updateDomains(ds => ds.map(d => d.id === domainId ? { ...d, goals: (d.goals || []).map(g => g.id === goalId ? { ...g, status: "active", achievedDate: undefined } : g) } : d));
+  };
+  const removeGoal = (domainId, goalId) => {
+    updateDomains(ds => ds.map(d => d.id === domainId ? { ...d, goals: (d.goals || []).filter(g => g.id !== goalId) } : d));
+  };
+  const saveGoalEdit = (domainId) => {
+    updateDomains(ds => ds.map(d => d.id === domainId ? { ...d, goals: (d.goals || []).map(g => g.id === editingGoalId ? { ...g, text: editGoalDraft.text, timeframe: editGoalDraft.timeframe } : g) } : d));
+    setEditingGoalId(null);
+  };
 
   // ── Daily Cycle ──
   const completeMorning = () => {
     const tasks = top3Draft.filter(t => t.text.trim()).map((t, i) => ({ id: "t" + (i+1), text: t.text.trim(), status: "undone", domainId: t.domainId || "" }));
     if (tasks.length === 0) return;
-    updateDailyLog(selectedDate, { top3: tasks, gratitude: gratitudeDraft, morningDone: true });
-    setTodayPhase("day");
+    updateDailyLog(selectedDate, { top3: tasks, gratitude: gratitudeDraft, morningDone: true }); setTodayPhase("day");
   };
-  const updateTop3Status = (idx, status) => {
-    const dl = getDailyLog(selectedDate); if (!dl.top3) return;
-    updateDailyLog(selectedDate, { top3: dl.top3.map((t, i) => i === idx ? { ...t, status } : t) });
-  };
+  const updateTop3Status = (idx, status) => { const dl = getDailyLog(selectedDate); if (!dl.top3) return; updateDailyLog(selectedDate, { top3: dl.top3.map((t, i) => i === idx ? { ...t, status } : t) }); };
   const completeEvening = () => {
     const nextDay = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
     setData(d => {
-      const log = { ...(d.forge.dailyLog || {}) };
-      const dayLog = { ...(log[selectedDate] || {}), journal: journalDraft, visionCheck: visionCheckDraft, eveningDone: true };
-      log[selectedDate] = dayLog;
-      if (dayLog.top3) {
-        const undone = dayLog.top3.filter(t => t.status === "undone");
-        if (undone.length > 0) {
-          log[nextDay] = { ...(log[nextDay] || {}), top3: [...((log[nextDay] || {}).top3 || []), ...undone.map((t, i) => ({ id: "carry" + (i+1), text: t.text, status: "undone", domainId: t.domainId || "" }))] };
-        }
-      }
+      const log = { ...(d.forge.dailyLog || {}) }; const dayLog = { ...(log[selectedDate] || {}), journal: journalDraft, visionCheck: visionCheckDraft, eveningDone: true }; log[selectedDate] = dayLog;
+      if (dayLog.top3) { const undone = dayLog.top3.filter(t => t.status === "undone"); if (undone.length > 0) { log[nextDay] = { ...(log[nextDay] || {}), top3: [...((log[nextDay] || {}).top3 || []), ...undone.map((t, i) => ({ id: "carry" + (i+1), text: t.text, status: "undone", domainId: t.domainId || "" }))] }; } }
       return { ...d, forge: { ...d.forge, dailyLog: log } };
     });
   };
@@ -134,45 +148,29 @@ export default function ForgePage() {
     const newMsgs = [...mirrorMessages, userMsg]; setMirrorMessages(newMsgs); setMirrorInput(""); setAiLoading(true);
     try {
       const domains = getDomains();
-      const domainCtx = domains.map(d => d.name + ": " + (d.vision || "未設定")).join("\n");
+      const domainCtx = domains.map(d => { const active = getActiveGoals(d); const achieved = getAchievedGoals(d); return d.name + ": Vision=" + (d.vision || "未設定") + (active.length ? " / 目標: " + active.map(g => g.text).join(", ") : "") + (achieved.length ? " / 達成済: " + achieved.map(g => g.text).join(", ") : ""); }).join("\n");
       const ctx = [data.forge.northStar && ("北極星: " + data.forge.northStar), data.forge.reasonForBeing && ("存在意義: " + data.forge.reasonForBeing), data.forge.values && ("価値観: " + data.forge.values), data.forge.antiVision && ("Anti-Vision: " + data.forge.antiVision), data.forge.vision && ("Vision: " + data.forge.vision), data.forge.identity && ("Identity: " + data.forge.identity), domains.length > 0 && ("領域:\n" + domainCtx)].filter(Boolean).join("\n");
       const logs = (data.forge.actionLog || []).slice(-5).map(l => "[" + l.tag + "] " + l.text).join("\n");
       const dl = getDailyLog(); const t3 = dl.top3 ? dl.top3.map(t => { const dom = getDomain(t.domainId); return "[" + t.status + "]" + (dom ? " [" + dom.name + "]" : "") + " " + t.text; }).join("\n") : "";
       const weekDates = getDailyLogDates().filter(d => d !== todayStr()).slice(0, 7);
-      const weekCtx = weekDates.map(d => { const wdl = getDailyLog(d); if (!wdl.top3) return ""; return d + ": " + wdl.top3.map(t => { const dom = getDomain(t.domainId); return (t.status === "done" ? "○" : t.status === "partial" ? "△" : "×") + (dom ? dom.name[0] : ""); }).join(" "); }).filter(Boolean).join("\n");
-      // Domain distribution for last 7 days
-      const domDist = {};
-      weekDates.concat([todayStr()]).forEach(d => { const wdl = getDailyLog(d); if (wdl.top3) wdl.top3.forEach(t => { if (t.domainId) { domDist[t.domainId] = (domDist[t.domainId] || 0) + 1; } }); });
-      const distCtx = Object.entries(domDist).map(([id, count]) => { const dom = getDomain(id); return dom ? dom.name + ": " + count + "件" : ""; }).filter(Boolean).join(", ");
-
+      const weekCtx = weekDates.map(d => { const wdl = getDailyLog(d); if (!wdl.top3) return ""; return d + ": " + wdl.top3.map(t => (t.status === "done" ? "○" : t.status === "partial" ? "△" : "×")).join(" "); }).filter(Boolean).join("\n");
       const res = await fetch("/api/mirror", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system: "あなたはMIRRORの対話AIです。ユーザーのありのままを映す鏡。評価せず励まさず事実を映す。問いを投げかけ気づきを促す。\n\nコンテキスト:\n" + ctx + "\n\nログ:\n" + logs + "\n\nTop3:\n" + t3 + "\n\n過去7日:\n" + weekCtx + "\n\n領域分布(7日):" + distCtx + "\n\n2〜4文+1つの問い。",
-          messages: newMsgs.map(m => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })),
-        }),
-      });
-      const result = await res.json(); const aiText = result.text || "接続エラー";
-      const finalMsgs = [...newMsgs, { role: "assistant", text: aiText, time: timeNow() }];
-      setMirrorMessages(finalMsgs);
-      const hist = [...(data.mirror.dialogueHistory || [])]; const ti = hist.findIndex(h => h.date === todayStr());
-      if (ti >= 0) hist[ti] = { date: todayStr(), messages: finalMsgs }; else hist.push({ date: todayStr(), messages: finalMsgs });
-      updateMirror("dialogueHistory", hist);
+        body: JSON.stringify({ system: "あなたはMIRRORの対話AIです。ユーザーのありのままを映す鏡。評価せず励まさず事実を映す。問いを投げかけ気づきを促す。\n\nコンテキスト:\n" + ctx + "\n\nログ:\n" + logs + "\n\nTop3:\n" + t3 + "\n\n過去7日:\n" + weekCtx + "\n\n2〜4文+1つの問い。",
+          messages: newMsgs.map(m => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })) }) });
+      const result = await res.json(); const finalMsgs = [...newMsgs, { role: "assistant", text: result.text || "接続エラー", time: timeNow() }];
+      setMirrorMessages(finalMsgs); const hist = [...(data.mirror.dialogueHistory || [])]; const ti = hist.findIndex(h => h.date === todayStr());
+      if (ti >= 0) hist[ti] = { date: todayStr(), messages: finalMsgs }; else hist.push({ date: todayStr(), messages: finalMsgs }); updateMirror("dialogueHistory", hist);
     } catch (err) { console.error(err); setMirrorMessages([...newMsgs, { role: "assistant", text: "接続エラー", time: timeNow() }]); }
     setAiLoading(false);
   };
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mirrorMessages]);
 
   // ── Computed ──
-  const nextInterrupt = useMemo(() => {
-    if (!data) return null;
-    return (data.forge.patternInterrupts || []).find(pi => pi.time > timeNow()) || null;
-  }, [data, section, todayPhase]);
+  const nextInterrupt = useMemo(() => { if (!data) return null; return (data.forge.patternInterrupts || []).find(pi => pi.time > timeNow()) || null; }, [data, section, todayPhase]);
   const todayLogs = useMemo(() => data ? (data.forge.actionLog || []).filter(l => l.date === selectedDate).reverse() : [], [data, selectedDate]);
-
   const stats = useMemo(() => {
     if (!data) return { streak: 0, weekDone: 0, weekTotal: 0, pureCount: 0, fearCount: 0, domainDist: {} };
-    const dates = Object.keys(data.forge.dailyLog || {}).sort().reverse();
-    let streak = 0; const today = todayStr();
+    const dates = Object.keys(data.forge.dailyLog || {}).sort().reverse(); let streak = 0; const today = todayStr();
     for (const d of dates) { const dl = (data.forge.dailyLog || {})[d]; if (dl && dl.morningDone) streak++; else if (d !== today) break; }
     let weekDone = 0, weekTotal = 0; const domainDist = {};
     dates.slice(0, 7).forEach(d => { const dl = (data.forge.dailyLog || {})[d]; if (dl && dl.top3) { dl.top3.forEach(t => { weekTotal++; if (t.status === "done") weekDone++; if (t.domainId) domainDist[t.domainId] = (domainDist[t.domainId] || 0) + 1; }); } });
@@ -185,14 +183,12 @@ export default function ForgePage() {
   const NAV = [{ id: "today", icon: "◉", label: "Today" }, { id: "foundation", icon: "△", label: "Foundation" }, { id: "mirror", icon: "◇", label: "Mirror" }, { id: "history", icon: "◫", label: "History" }];
   const tagColors = { pure: T.teal, fear: T.coral, unknown: T.textDim };
   const tagLabels = { pure: "純粋", fear: "恐怖", unknown: "不明" };
-  const statusIcons = { done: "○", partial: "△", undone: "×" };
-  const statusColors = { done: T.green, partial: T.morning, undone: T.red };
-  const dl = getDailyLog(selectedDate);
-  const isViewingToday = selectedDate === todayStr();
+  const statusIcons = { done: "○", partial: "△", undone: "×" }; const statusColors = { done: T.green, partial: T.morning, undone: T.red };
+  const dl = getDailyLog(selectedDate); const isViewingToday = selectedDate === todayStr();
   const shiftDate = (days) => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + days); setSelectedDate(toDateStr(d)); };
-  const domains = getDomains();
+  const domains = getDomains(); const tfLabel = (tf) => (TIMEFRAMES.find(t => t.id === tf) || {}).label || "";
 
-  // ── Render: Editable Card ──
+  // ── Render helpers ──
   const renderEditableCard = (label, value, field, accent, placeholder, multiline, question) => (
     <div key={field} style={{ background: T.surface, border: "1px solid " + T.border, borderLeft: "3px solid " + accent, borderRadius: 10, padding: "16px 20px", marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: question ? 4 : 8 }}>
@@ -208,61 +204,39 @@ export default function ForgePage() {
     </div>
   );
 
-  // ── Render: Domain pill (for Top 3 tagging) ──
-  const renderDomainPills = (selectedId, onSelect) => {
-    if (domains.length === 0) return null;
-    return (<div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 4 }}>
-      {domains.map(d => (<button key={d.id} onClick={() => onSelect(selectedId === d.id ? "" : d.id)} style={{
-        ...btnSm, fontSize: 9, padding: "2px 8px", borderRadius: 10,
-        background: selectedId === d.id ? d.color + "25" : "transparent",
-        color: selectedId === d.id ? d.color : T.textDim,
-        border: "1px solid " + (selectedId === d.id ? d.color + "60" : T.border),
-      }}>{d.emoji} {d.name}</button>))}
-    </div>);
-  };
+  const renderDomainPills = (selectedId, onSelect) => { if (domains.length === 0) return null; return (<div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 4 }}>{domains.map(d => (<button key={d.id} onClick={() => onSelect(selectedId === d.id ? "" : d.id)} style={{ ...btnSm, fontSize: 9, padding: "2px 8px", borderRadius: 10, background: selectedId === d.id ? d.color + "25" : "transparent", color: selectedId === d.id ? d.color : T.textDim, border: "1px solid " + (selectedId === d.id ? d.color + "60" : T.border) }}>{d.emoji} {d.name}</button>))}</div>); };
 
-  // ── Render: Domain Goal Tree (Morning) ──
   const renderDomainGoalTree = () => {
-    const activeDomains = domains.filter(d => d.vision || d.goalWeek || d.goalMonth || d.goalQuarter || d.goal1year);
+    const activeDomains = domains.filter(d => d.vision || getActiveGoals(d).length > 0);
     if (activeDomains.length === 0 && !data.forge.vision) return null;
     return (<div style={{ marginBottom: 16 }}>
       {data.forge.vision && (<div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 6, borderLeft: "2px solid " + T.accent, background: T.accent + "08", marginBottom: 4 }}>
         <span style={{ fontSize: 9, fontWeight: 600, color: T.accent, width: 50, flexShrink: 0 }}>VISION</span>
         <span style={{ fontSize: 12, color: T.text, fontFamily: "var(--fc)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.forge.vision}</span>
       </div>)}
-      {activeDomains.map(d => (<div key={d.id} style={{ marginLeft: 12, marginBottom: 4 }}>
+      {activeDomains.map(d => { const active = getActiveGoals(d); const weekGoal = active.find(g => g.timeframe === "week"); const topGoal = weekGoal || active[0]; return (<div key={d.id} style={{ marginLeft: 12, marginBottom: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 6, borderLeft: "2px solid " + d.color, background: d.color + "08" }}>
           <span style={{ fontSize: 11 }}>{d.emoji}</span>
           <span style={{ fontSize: 11, fontWeight: 600, color: d.color, flex: 1 }}>{d.name}</span>
-          {d.goalWeek && <span style={{ fontSize: 10, color: T.textMuted, fontFamily: "var(--fc)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>今週: {d.goalWeek}</span>}
+          {topGoal && <span style={{ fontSize: 10, color: T.textMuted, fontFamily: "var(--fc)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "55%" }}>{topGoal.timeframe ? tfLabel(topGoal.timeframe) + ": " : ""}{topGoal.text}</span>}
         </div>
-        {d.vision && !d.goalWeek && (<div style={{ marginLeft: 28, fontSize: 10, color: T.textDim, fontStyle: "italic", padding: "2px 0" }}>{d.vision}</div>)}
-      </div>))}
+        {d.vision && !topGoal && (<div style={{ marginLeft: 28, fontSize: 10, color: T.textDim, fontStyle: "italic", padding: "2px 0" }}>{d.vision}</div>)}
+      </div>); })}
     </div>);
   };
 
-  // ── Render: Domain distribution bar ──
   const renderDomainDistribution = () => {
     const total = Object.values(stats.domainDist).reduce((s, v) => s + v, 0);
     if (total === 0 || domains.length === 0) return null;
     return (<div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
       <div style={{ fontSize: 9, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>7日間のエネルギー配分</div>
-      <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
-        {domains.map(d => { const count = stats.domainDist[d.id] || 0; if (count === 0) return null; return (<div key={d.id} style={{ width: (count / total * 100) + "%", background: d.color, transition: "width 0.3s" }} />); })}
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {domains.map(d => { const count = stats.domainDist[d.id] || 0; if (count === 0) return null; return (<div key={d.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.color }} />
-          <span style={{ fontSize: 9, color: T.textMuted }}>{d.emoji}{d.name} {Math.round(count / total * 100)}%</span>
-        </div>); })}
-      </div>
+      <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>{domains.map(d => { const count = stats.domainDist[d.id] || 0; if (count === 0) return null; return (<div key={d.id} style={{ width: (count / total * 100) + "%", background: d.color }} />); })}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{domains.map(d => { const count = stats.domainDist[d.id] || 0; if (count === 0) return null; return (<div key={d.id} style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: d.color }} /><span style={{ fontSize: 9, color: T.textMuted }}>{d.emoji}{d.name} {Math.round(count / total * 100)}%</span></div>); })}</div>
     </div>);
   };
 
-  // ── Render: Stats (14-day dots) ──
   const renderStats = () => {
-    const dotDays = [];
-    for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const ds = toDateStr(d); const ddl = getDailyLog(ds); const isToday = ds === todayStr(); let level = 0;
+    const dotDays = []; for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const ds = toDateStr(d); const ddl = getDailyLog(ds); const isToday = ds === todayStr(); let level = 0;
       if (ddl.morningDone) { level = 1; if (ddl.top3) { const done = ddl.top3.filter(t => t.status === "done").length; if (done > 0 && done < ddl.top3.length) level = 2; else if (done === ddl.top3.length) level = 3; } if (ddl.eveningDone && level >= 3) level = 4; }
       dotDays.push({ date: ds, day: d.getDate(), dow: ["日","月","火","水","木","金","土"][d.getDay()], level, isToday }); }
     const dotColors = ["transparent", T.accent + "30", T.accent + "55", T.accent + "88", T.accent];
@@ -272,17 +246,8 @@ export default function ForgePage() {
     const pureRatio = stats.pureCount + stats.fearCount > 0 ? Math.round(stats.pureCount / (stats.pureCount + stats.fearCount) * 100) : null;
     return (<div style={{ marginBottom: 16 }}>
       <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
-        <div style={{ display: "flex", gap: 4, justifyContent: "center", marginBottom: 6 }}>
-          {dotDays.map(d => (<div key={d.date} onClick={() => { if (!d.isToday) { setHistoryDate(d.date); setHistoryMonth(d.date.slice(0,7)); setSection("history"); } }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: d.isToday ? "default" : "pointer" }}>
-            <div style={{ fontSize: 8, color: d.isToday ? T.accent : T.textDim, fontFamily: "var(--fm)" }}>{d.dow}</div>
-            <div style={{ width: d.isToday ? 26 : 22, height: d.isToday ? 26 : 22, borderRadius: 4, background: d.level > 0 ? dotColors[d.level] : "transparent", border: d.isToday ? "1.5px solid " + T.accent : dotBorders[d.level], display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: 8, color: d.level >= 3 ? "#fff" : d.level > 0 ? T.accent : T.textDim, fontFamily: "var(--fm)", fontWeight: d.isToday ? 600 : 400 }}>{d.day}</span>
-            </div>
-          </div>))}
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 4 }}>
-          {[["未記録",0],["開始",1],["進行",2],["達成",3],["完遂",4]].map(([label,lv]) => (<div key={lv} style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: lv > 0 ? dotColors[lv] : "transparent", border: lv === 0 ? "1px solid " + T.border : "none" }} /><span style={{ fontSize: 8, color: T.textDim }}>{label}</span></div>))}
-        </div>
+        <div style={{ display: "flex", gap: 4, justifyContent: "center", marginBottom: 6 }}>{dotDays.map(d => (<div key={d.date} onClick={() => { if (!d.isToday) { setHistoryDate(d.date); setHistoryMonth(d.date.slice(0,7)); setSection("history"); } }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: d.isToday ? "default" : "pointer" }}><div style={{ fontSize: 8, color: d.isToday ? T.accent : T.textDim, fontFamily: "var(--fm)" }}>{d.dow}</div><div style={{ width: d.isToday ? 26 : 22, height: d.isToday ? 26 : 22, borderRadius: 4, background: d.level > 0 ? dotColors[d.level] : "transparent", border: d.isToday ? "1.5px solid " + T.accent : dotBorders[d.level], display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 8, color: d.level >= 3 ? "#fff" : d.level > 0 ? T.accent : T.textDim, fontFamily: "var(--fm)", fontWeight: d.isToday ? 600 : 400 }}>{d.day}</span></div></div>))}</div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 4 }}>{[["未記録",0],["開始",1],["進行",2],["達成",3],["完遂",4]].map(([label,lv]) => (<div key={lv} style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: lv > 0 ? dotColors[lv] : "transparent", border: lv === 0 ? "1px solid " + T.border : "none" }} /><span style={{ fontSize: 8, color: T.textDim }}>{label}</span></div>))}</div>
       </div>
       {renderDomainDistribution()}
       <div style={{ display: "flex", gap: 8 }}>
@@ -293,17 +258,45 @@ export default function ForgePage() {
     </div>);
   };
 
-  // ── Render: Top 3 task with domain tag ──
-  const renderTop3Display = (task, idx) => {
-    const dom = getDomain(task.domainId);
-    return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: T.surface, border: "1px solid " + T.border, borderRadius: 6, marginBottom: 4 }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 16, textAlign: "center", flexShrink: 0 }}>{idx+1}</span>
-      {dom && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 8, background: dom.color + "20", color: dom.color, flexShrink: 0 }}>{dom.emoji}</span>}
-      <span style={{ flex: 1, fontSize: 12, color: task.status === "done" ? T.textDim : T.text, textDecoration: task.status === "done" ? "line-through" : "none" }}>{task.text}</span>
-      <div style={{ display: "flex", gap: 3 }}>
-        {["done","partial","undone"].map(s => (<button key={s} onClick={() => updateTop3Status(idx, s)} style={{ ...btnSm, fontSize: 12, padding: "2px 6px", color: task.status === s ? statusColors[s] : T.textDim, background: task.status === s ? statusColors[s] + "15" : "transparent", border: "1px solid " + (task.status === s ? statusColors[s] + "50" : "transparent"), borderRadius: 4 }}>{statusIcons[s]}</button>))}
+  const renderTop3Display = (task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: T.surface, border: "1px solid " + T.border, borderRadius: 6, marginBottom: 4 }}>
+    <span style={{ fontSize: 12, fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 16, textAlign: "center", flexShrink: 0 }}>{idx+1}</span>
+    {dom && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 8, background: dom.color + "20", color: dom.color, flexShrink: 0 }}>{dom.emoji}</span>}
+    <span style={{ flex: 1, fontSize: 12, color: task.status === "done" ? T.textDim : T.text, textDecoration: task.status === "done" ? "line-through" : "none" }}>{task.text}</span>
+    <div style={{ display: "flex", gap: 3 }}>{["done","partial","undone"].map(s => (<button key={s} onClick={() => updateTop3Status(idx, s)} style={{ ...btnSm, fontSize: 12, padding: "2px 6px", color: task.status === s ? statusColors[s] : T.textDim, background: task.status === s ? statusColors[s] + "15" : "transparent", border: "1px solid " + (task.status === s ? statusColors[s] + "50" : "transparent"), borderRadius: 4 }}>{statusIcons[s]}</button>))}</div>
+  </div>); };
+
+  // ── Goal card for Foundation ──
+  const renderGoalItem = (g, domainId, domainColor) => {
+    const isEditing = editingGoalId === g.id;
+    if (g.status === "achieved") return (
+      <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: T.green + "08", borderRadius: 6, marginBottom: 4, border: "1px solid " + T.green + "20" }}>
+        <span style={{ color: T.gold, fontSize: 12 }}>★</span>
+        <span style={{ flex: 1, fontSize: 12, color: T.textMuted, fontFamily: "var(--fc)" }}>{g.text}</span>
+        {g.timeframe && <span style={{ fontSize: 9, color: T.textDim, padding: "1px 6px", borderRadius: 8, background: T.surface }}>{tfLabel(g.timeframe)}</span>}
+        <span style={{ fontSize: 9, color: T.green }}>{g.achievedDate}</span>
+        <button onClick={() => reactivateGoal(domainId, g.id)} style={{ ...btnSm, color: T.textDim, fontSize: 9 }}>戻す</button>
       </div>
-    </div>);
+    );
+    if (isEditing) return (
+      <div key={g.id} style={{ padding: "8px 10px", background: T.surface, borderRadius: 6, marginBottom: 4, border: "1px solid " + domainColor + "40" }}>
+        <input value={editGoalDraft.text} onChange={e => setEditGoalDraft(p => ({...p, text: e.target.value}))} style={{ ...inputBase, width: "100%", marginBottom: 6 }} autoFocus onKeyDown={e => e.key === "Enter" && saveGoalEdit(domainId)} />
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          {TIMEFRAMES.map(tf => (<button key={tf.id} onClick={() => setEditGoalDraft(p => ({...p, timeframe: tf.id}))} style={{ ...btnSm, fontSize: 9, padding: "2px 6px", color: editGoalDraft.timeframe === tf.id ? domainColor : T.textDim, border: "1px solid " + (editGoalDraft.timeframe === tf.id ? domainColor + "60" : T.border), background: editGoalDraft.timeframe === tf.id ? domainColor + "15" : "transparent", borderRadius: 8 }}>{tf.label}</button>))}
+          <div style={{ flex: 1 }} />
+          <button onClick={() => saveGoalEdit(domainId)} style={{ ...btnSm, color: T.green, fontSize: 10 }}>✓</button>
+          <button onClick={() => setEditingGoalId(null)} style={{ ...btnSm, color: T.textDim, fontSize: 10 }}>×</button>
+        </div>
+      </div>
+    );
+    return (
+      <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: T.surface, borderRadius: 6, marginBottom: 4, border: "1px solid " + T.border }}>
+        {g.timeframe && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 8, background: domainColor + "15", color: domainColor, flexShrink: 0 }}>{tfLabel(g.timeframe)}</span>}
+        <span style={{ flex: 1, fontSize: 12, color: T.text, fontFamily: "var(--fc)" }}>{g.text}</span>
+        <button onClick={() => achieveGoal(domainId, g.id)} title="達成" style={{ ...btnSm, color: T.green, fontSize: 12, padding: "2px 6px" }}>★</button>
+        <button onClick={() => { setEditingGoalId(g.id); setEditGoalDraft({ text: g.text, timeframe: g.timeframe }); }} style={{ ...btnSm, color: T.textDim, fontSize: 9 }}>編集</button>
+        <button onClick={() => removeGoal(domainId, g.id)} style={{ ...btnSm, color: T.textDim, fontSize: 9 }}>×</button>
+      </div>
+    );
   };
 
   // ═══════ TODAY ═══════
@@ -314,10 +307,7 @@ export default function ForgePage() {
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <button onClick={() => shiftDate(-1)} style={{ ...btnSm, color: T.textMuted, border: "1px solid " + T.border, padding: "4px 10px", fontSize: 14 }}>←</button>
-          <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: isViewingToday ? T.textDim : T.morning, letterSpacing: "0.1em", textTransform: "uppercase" }}>{dateLabel}</div>
-            <h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>{isViewingToday ? "Today" : dayLabel(selectedDate)}</h1>
-          </div>
+          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 11, color: isViewingToday ? T.textDim : T.morning, letterSpacing: "0.1em", textTransform: "uppercase" }}>{dateLabel}</div><h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>{isViewingToday ? "Today" : dayLabel(selectedDate)}</h1></div>
           <button onClick={() => shiftDate(1)} disabled={isViewingToday} style={{ ...btnSm, color: isViewingToday ? T.border : T.textMuted, border: "1px solid " + T.border, padding: "4px 10px", fontSize: 14, cursor: isViewingToday ? "default" : "pointer" }}>→</button>
         </div>
         {!isViewingToday && (<div style={{ textAlign: "center" }}><button onClick={() => setSelectedDate(todayStr())} style={{ ...btnSm, color: T.accent, fontSize: 11, padding: "2px 10px", border: "1px solid " + T.accent + "44" }}>今日に戻る</button></div>)}
@@ -330,36 +320,20 @@ export default function ForgePage() {
           </div>))}
       </div>
 
-      {/* MORNING */}
       {todayPhase === "morning" && (<div>
         {dl.morningDone ? (<div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ color: T.green, fontSize: 14 }}>✓</span><span style={{ fontSize: 13, color: T.textMuted }}>Morning 完了</span></div>
-            <button onClick={() => updateDailyLog(selectedDate, { morningDone: false })} style={{ ...btnSm, color: T.textDim, border: "1px solid " + T.border, padding: "3px 10px" }}>修正する</button>
-          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ color: T.green, fontSize: 14 }}>✓</span><span style={{ fontSize: 13, color: T.textMuted }}>Morning 完了</span></div><button onClick={() => updateDailyLog(selectedDate, { morningDone: false })} style={{ ...btnSm, color: T.textDim, border: "1px solid " + T.border, padding: "3px 10px" }}>修正する</button></div>
           {dl.gratitude && <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 8, padding: "6px 10px", background: T.surface, borderRadius: 6 }}><span style={{ color: T.morning, fontSize: 9, fontWeight: 600, marginRight: 6 }}>感謝</span>{dl.gratitude}</div>}
-          {dl.top3 && dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}>
-            <span style={{ fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 16, textAlign: "center", flexShrink: 0 }}>{idx+1}</span>
-            {dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}
-            <span style={{ color: task.status === "done" ? T.textDim : T.text, textDecoration: task.status === "done" ? "line-through" : "none" }}>{task.text}</span>
-          </div>); })}
-        </div>
-        ) : (<div>
+          {dl.top3 && dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}><span style={{ fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 16, textAlign: "center", flexShrink: 0 }}>{idx+1}</span>{dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}<span style={{ color: task.status === "done" ? T.textDim : T.text }}>{task.text}</span></div>); })}
+        </div>) : (<div>
           {renderDomainGoalTree()}
           <div style={{ marginBottom: 12 }}><input value={gratitudeDraft} onChange={e => setGratitudeDraft(e.target.value)} placeholder="今朝、感謝していることは？（任意）" style={{ ...inputBase, width: "100%", fontSize: 12 }} /></div>
           <div style={{ fontSize: 13, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", lineHeight: 1.7, marginBottom: 14, padding: "10px 14px", background: T.morningDim, borderRadius: 8, border: "1px solid " + T.morning + "22" }}>この流れに今日1ミリでも近づくための、小さな行動を3つ。</div>
-          {[0,1,2].map(i => (<div key={i} style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 20, textAlign: "center", flexShrink: 0 }}>{i+1}</span>
-              <input value={top3Draft[i].text} onChange={e => { const d = [...top3Draft]; d[i] = { ...d[i], text: e.target.value }; setTop3Draft(d); }} placeholder={i === 2 ? "（任意）" : "タスクを入力..."} style={{ ...inputBase, flex: 1 }} />
-            </div>
-            <div style={{ marginLeft: 28 }}>{renderDomainPills(top3Draft[i].domainId, (id) => { const d = [...top3Draft]; d[i] = { ...d[i], domainId: id }; setTop3Draft(d); })}</div>
-          </div>))}
+          {[0,1,2].map(i => (<div key={i} style={{ marginBottom: 10 }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 14, fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 20, textAlign: "center", flexShrink: 0 }}>{i+1}</span><input value={top3Draft[i].text} onChange={e => { const d = [...top3Draft]; d[i] = { ...d[i], text: e.target.value }; setTop3Draft(d); }} placeholder={i === 2 ? "（任意）" : "タスクを入力..."} style={{ ...inputBase, flex: 1 }} /></div><div style={{ marginLeft: 28 }}>{renderDomainPills(top3Draft[i].domainId, (id) => { const d = [...top3Draft]; d[i] = { ...d[i], domainId: id }; setTop3Draft(d); })}</div></div>))}
           <button onClick={completeMorning} disabled={!top3Draft[0].text.trim()} style={{ ...btnPrimary, width: "100%", marginTop: 8, opacity: top3Draft[0].text.trim() ? 1 : 0.4 }}>Morning 完了 ✓</button>
         </div>)}
       </div>)}
 
-      {/* DAY */}
       {todayPhase === "day" && (<div>
         {renderStats()}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
@@ -369,45 +343,23 @@ export default function ForgePage() {
         {dl.top3 && dl.top3.length > 0 && (<div style={{ marginBottom: 14 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.morning, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Top 3</div>{dl.top3.map((task, idx) => renderTop3Display(task, idx))}</div>)}
         {!dl.morningDone && (<div onClick={() => setTodayPhase("morning")} style={{ background: T.morningDim, border: "1px solid " + T.morning + "22", borderRadius: 8, padding: "12px 14px", cursor: "pointer", marginBottom: 14 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.morning, textTransform: "uppercase", marginBottom: 2 }}>Morning</div><div style={{ fontSize: 12, color: T.text }}>タップして始める</div></div>)}
         {nextInterrupt && (<div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}><div style={{ background: T.accentDim, borderRadius: 6, padding: "4px 8px", fontFamily: "var(--fm)", fontSize: 11, fontWeight: 600, color: T.accent, flexShrink: 0 }}>{nextInterrupt.time}</div><div style={{ fontSize: 12, color: T.text, fontFamily: "var(--fc)" }}>{nextInterrupt.question}</div></div>)}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>行動ログ</div>
-          <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-            <input value={logInput} onChange={e => setLogInput(e.target.value)} placeholder="今やったこと・感じたこと..." style={{ ...inputBase, flex: 1, fontSize: 12 }} onKeyDown={e => e.key === "Enter" && addLog()} />
-            <div style={{ display: "flex", gap: 2 }}>{["pure","fear","unknown"].map(tag => (<button key={tag} onClick={() => setLogTag(tag)} style={{ ...btnSm, fontSize: 9, padding: "3px 6px", background: logTag === tag ? tagColors[tag] + "25" : "transparent", color: logTag === tag ? tagColors[tag] : T.textDim, border: "1px solid " + (logTag === tag ? tagColors[tag] + "50" : T.border) }}>{tagLabels[tag]}</button>))}</div>
-            <button onClick={() => addLog()} style={{ ...btnPrimary, padding: "4px 10px", fontSize: 12 }}>+</button>
-          </div>
-          {todayLogs.slice(0,5).map(l => (<div key={l.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: "1px solid " + T.border + "33" }}><span style={{ fontSize: 9, fontFamily: "var(--fm)", color: T.textDim, flexShrink: 0 }}>{l.time}</span><span style={{ width: 4, height: 4, borderRadius: "50%", background: tagColors[l.tag], flexShrink: 0 }} /><span style={{ fontSize: 11, color: T.text, flex: 1 }}>{l.text}</span></div>))}
-        </div>
+        <div style={{ marginBottom: 14 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>行動ログ</div>
+          <div style={{ display: "flex", gap: 4, marginBottom: 6 }}><input value={logInput} onChange={e => setLogInput(e.target.value)} placeholder="今やったこと・感じたこと..." style={{ ...inputBase, flex: 1, fontSize: 12 }} onKeyDown={e => e.key === "Enter" && addLog()} /><div style={{ display: "flex", gap: 2 }}>{["pure","fear","unknown"].map(tag => (<button key={tag} onClick={() => setLogTag(tag)} style={{ ...btnSm, fontSize: 9, padding: "3px 6px", background: logTag === tag ? tagColors[tag] + "25" : "transparent", color: logTag === tag ? tagColors[tag] : T.textDim, border: "1px solid " + (logTag === tag ? tagColors[tag] + "50" : T.border) }}>{tagLabels[tag]}</button>))}</div><button onClick={() => addLog()} style={{ ...btnPrimary, padding: "4px 10px", fontSize: 12 }}>+</button></div>
+          {todayLogs.slice(0,5).map(l => (<div key={l.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: "1px solid " + T.border + "33" }}><span style={{ fontSize: 9, fontFamily: "var(--fm)", color: T.textDim, flexShrink: 0 }}>{l.time}</span><span style={{ width: 4, height: 4, borderRadius: "50%", background: tagColors[l.tag], flexShrink: 0 }} /><span style={{ fontSize: 11, color: T.text, flex: 1 }}>{l.text}</span></div>))}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <div onClick={() => setSection("mirror")} style={{ background: T.tealDim, border: "1px solid " + T.teal + "22", borderRadius: 8, padding: "10px 12px", cursor: "pointer" }}><div style={{ fontSize: 9, fontWeight: 600, color: T.teal, textTransform: "uppercase", marginBottom: 2 }}>Mirror</div><div style={{ fontSize: 11, color: T.text }}>鏡に向かう</div></div>
           <div onClick={() => setTodayPhase("evening")} style={{ background: T.eveningDim, border: "1px solid " + T.evening + "22", borderRadius: 8, padding: "10px 12px", cursor: "pointer" }}><div style={{ fontSize: 9, fontWeight: 600, color: T.evening, textTransform: "uppercase", marginBottom: 2 }}>Evening</div><div style={{ fontSize: 11, color: T.text }}>振り返る</div></div>
         </div>
       </div>)}
 
-      {/* EVENING */}
       {todayPhase === "evening" && (<div>
         {dl.eveningDone ? (<div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ color: T.green, fontSize: 14 }}>✓</span><span style={{ fontSize: 13, color: T.textMuted }}>Evening 完了</span></div>
-            <button onClick={() => updateDailyLog(selectedDate, { eveningDone: false })} style={{ ...btnSm, color: T.textDim, border: "1px solid " + T.border, padding: "3px 10px" }}>修正する</button>
-          </div>
-          {dl.top3 && dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}>
-            <span style={{ color: statusColors[task.status] }}>{statusIcons[task.status]}</span>
-            {dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}
-            <span style={{ color: task.status === "done" ? T.textDim : T.text, textDecoration: task.status === "done" ? "line-through" : "none" }}>{task.text}</span>
-          </div>); })}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ color: T.green, fontSize: 14 }}>✓</span><span style={{ fontSize: 13, color: T.textMuted }}>Evening 完了</span></div><button onClick={() => updateDailyLog(selectedDate, { eveningDone: false })} style={{ ...btnSm, color: T.textDim, border: "1px solid " + T.border, padding: "3px 10px" }}>修正する</button></div>
+          {dl.top3 && dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}><span style={{ color: statusColors[task.status] }}>{statusIcons[task.status]}</span>{dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}<span style={{ color: task.status === "done" ? T.textDim : T.text }}>{task.text}</span></div>); })}
           {dl.journal && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 8, padding: "6px 10px", background: T.surface, borderRadius: 6, borderLeft: "2px solid " + T.evening }}><span style={{ color: T.evening, fontSize: 9, fontWeight: 600, marginRight: 6 }}>Journal</span>{dl.journal}</div>}
           {dl.visionCheck && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4, fontStyle: "italic" }}>{dl.visionCheck}</div>}
-        </div>
-        ) : (<div>
-          {dl.top3 && dl.top3.length > 0 && (<div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 10 }}>今日の Top 3 はどうでしたか？</div>
-            {dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: T.surface, border: "1px solid " + T.border, borderRadius: 6, marginBottom: 4 }}>
-              {dom && <span style={{ fontSize: 10, color: dom.color }}>{dom.emoji}</span>}
-              <span style={{ flex: 1, fontSize: 12, color: T.text }}>{task.text}</span>
-              <div style={{ display: "flex", gap: 4 }}>{["done","partial","undone"].map(s => (<button key={s} onClick={() => updateTop3Status(idx, s)} style={{ ...btnSm, fontSize: 13, padding: "3px 8px", color: task.status === s ? statusColors[s] : T.textDim, border: "1.5px solid " + (task.status === s ? statusColors[s] : T.border), background: task.status === s ? statusColors[s] + "15" : "transparent", borderRadius: 6 }}>{statusIcons[s]}</button>))}</div>
-            </div>); })}
-          </div>)}
+        </div>) : (<div>
+          {dl.top3 && dl.top3.length > 0 && (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 10 }}>今日の Top 3 はどうでしたか？</div>{dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: T.surface, border: "1px solid " + T.border, borderRadius: 6, marginBottom: 4 }}>{dom && <span style={{ fontSize: 10, color: dom.color }}>{dom.emoji}</span>}<span style={{ flex: 1, fontSize: 12, color: T.text }}>{task.text}</span><div style={{ display: "flex", gap: 4 }}>{["done","partial","undone"].map(s => (<button key={s} onClick={() => updateTop3Status(idx, s)} style={{ ...btnSm, fontSize: 13, padding: "3px 8px", color: task.status === s ? statusColors[s] : T.textDim, border: "1.5px solid " + (task.status === s ? statusColors[s] : T.border), background: task.status === s ? statusColors[s] + "15" : "transparent", borderRadius: 6 }}>{statusIcons[s]}</button>))}</div></div>); })}</div>)}
           {!dl.top3 && <div style={{ fontSize: 12, color: T.textDim, padding: 16, textAlign: "center" }}>Morning が未完了です</div>}
           <div style={{ marginBottom: 12 }}><div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 6 }}>今日気づいたこと・学び</div><textarea value={journalDraft} onChange={e => setJournalDraft(e.target.value)} rows={3} placeholder="ジャーナル..." style={{ ...inputBase, width: "100%", resize: "vertical", minHeight: 50 }} /></div>
           <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 6 }}>今日の積み重ねは、Visionに向かっていましたか？</div><input value={visionCheckDraft} onChange={e => setVisionCheckDraft(e.target.value)} placeholder="任意" style={{ ...inputBase, width: "100%" }} /></div>
@@ -434,14 +386,12 @@ export default function ForgePage() {
     {renderEditableCard("Vision — 方向", data.forge.vision, "vision", T.accent, "「自分はこれから何に向かうべきか」を一文で", true)}
     {renderEditableCard("Identity — 私は誰になるのか", data.forge.identity, "identity", T.teal, "理想を手にしたあなたはどんなタイプの人間か？", true)}
 
-    {/* Balance Wheel */}
     <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 28, marginBottom: 10 }}>Balance Wheel — 人生の領域</div>
-    <div style={{ fontSize: 11, color: T.textDim, marginBottom: 12, fontFamily: "var(--fc)", fontStyle: "italic" }}>自分にとって大切な領域を定義し、それぞれにVisionとゴールを設定。全て任意、空でもOK。</div>
+    <div style={{ fontSize: 11, color: T.textDim, marginBottom: 12, fontFamily: "var(--fc)", fontStyle: "italic" }}>領域ごとにVisionと目標を設定。目標は複数追加でき、達成すると成果として残ります。</div>
 
     {domains.map(d => {
-      const isExp = expandedDomain === d.id;
-      const isEditingHeader = editingDomainHeader === d.id;
-      const filled = [d.vision, d.goal1year, d.goalQuarter, d.goalMonth, d.goalWeek].filter(Boolean).length;
+      const isExp = expandedDomain === d.id; const isEditingHeader = editingDomainHeader === d.id;
+      const active = getActiveGoals(d); const achieved = getAchievedGoals(d);
       return (<div key={d.id} style={{ marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.surface, border: "1px solid " + (isExp ? d.color + "40" : T.border), borderRadius: isExp ? "10px 10px 0 0" : 10 }}>
           {isEditingHeader ? (<>
@@ -452,44 +402,45 @@ export default function ForgePage() {
           </>) : (<>
             <span onClick={(e) => { e.stopPropagation(); setEditingDomainHeader(d.id); setDomainHeaderDraft({ name: d.name, emoji: d.emoji }); }} style={{ fontSize: 16, cursor: "pointer" }}>{d.emoji}</span>
             <span onClick={(e) => { e.stopPropagation(); setEditingDomainHeader(d.id); setDomainHeaderDraft({ name: d.name, emoji: d.emoji }); }} style={{ fontSize: 14, fontWeight: 500, color: d.color, flex: 1, cursor: "pointer" }}>{d.name}</span>
-            <span style={{ fontSize: 10, color: T.textDim }}>{filled}/5</span>
+            <span style={{ fontSize: 10, color: T.textDim }}>{active.length}目標{achieved.length > 0 ? " / ★" + achieved.length : ""}</span>
             <span onClick={() => setExpandedDomain(isExp ? null : d.id)} style={{ fontSize: 10, color: T.textDim, cursor: "pointer", padding: "4px 8px" }}>{isExp ? "▼" : "▶"}</span>
           </>)}
         </div>
         {isExp && (<div style={{ background: T.surfaceAlt, border: "1px solid " + T.border, borderTop: "none", borderRadius: "0 0 10px 10px", padding: "14px 18px" }}>
           {renderEditableCard("Vision", d.vision, "domain:" + d.id + ":vision", d.color, "この領域で目指す姿", true)}
-          {renderEditableCard("1年ゴール", d.goal1year, "domain:" + d.id + ":goal1year", d.color, "1年後の状態", false, "1年後に達成していれば？")}
-          {renderEditableCard("四半期", d.goalQuarter, "domain:" + d.id + ":goalQuarter", d.color, "今四半期の焦点", false)}
-          {renderEditableCard("今月", d.goalMonth, "domain:" + d.id + ":goalMonth", d.color, "今月の一歩", false)}
-          {renderEditableCard("今週", d.goalWeek, "domain:" + d.id + ":goalWeek", d.color, "今週の焦点", false)}
-          <button onClick={() => removeDomain(d.id)} style={{ ...btnSm, color: T.red, fontSize: 10, marginTop: 8 }}>この領域を削除</button>
+
+          <div style={{ fontSize: 10, fontWeight: 600, color: d.color, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8, marginTop: 12 }}>目標</div>
+          {active.map(g => renderGoalItem(g, d.id, d.color))}
+
+          {addingGoalTo === d.id ? (<div style={{ padding: "8px 10px", background: T.surface, borderRadius: 6, marginBottom: 4, border: "1px dashed " + d.color + "40" }}>
+            <input value={newGoal.text} onChange={e => setNewGoal(p => ({...p, text: e.target.value}))} placeholder="目標を入力..." style={{ ...inputBase, width: "100%", marginBottom: 6 }} autoFocus onKeyDown={e => e.key === "Enter" && addGoal(d.id)} />
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              {TIMEFRAMES.map(tf => (<button key={tf.id} onClick={() => setNewGoal(p => ({...p, timeframe: tf.id}))} style={{ ...btnSm, fontSize: 9, padding: "2px 6px", color: newGoal.timeframe === tf.id ? d.color : T.textDim, border: "1px solid " + (newGoal.timeframe === tf.id ? d.color + "60" : T.border), background: newGoal.timeframe === tf.id ? d.color + "15" : "transparent", borderRadius: 8 }}>{tf.label}</button>))}
+              <div style={{ flex: 1 }} />
+              <button onClick={() => addGoal(d.id)} style={{ ...btnPrimary, padding: "4px 12px" }}>追加</button>
+              <button onClick={() => { setAddingGoalTo(null); setNewGoal({ text: "", timeframe: "" }); }} style={{ ...btnSm, color: T.textDim }}>×</button>
+            </div>
+          </div>) : (<button onClick={() => setAddingGoalTo(d.id)} style={{ ...btnSm, color: T.textDim, border: "1px dashed " + T.border, padding: "6px 12px", width: "100%", marginBottom: 4 }}>+ 目標を追加</button>)}
+
+          {achieved.length > 0 && (<div style={{ marginTop: 12 }}>
+            <div onClick={() => setShowAchieved(p => ({...p, [d.id]: !p[d.id]}))} style={{ fontSize: 10, color: T.gold, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, marginBottom: 6 }}>
+              <span>★ 達成した目標 ({achieved.length})</span><span style={{ fontSize: 9 }}>{showAchieved[d.id] ? "▼" : "▶"}</span>
+            </div>
+            {showAchieved[d.id] && achieved.map(g => renderGoalItem(g, d.id, d.color))}
+          </div>)}
+          <button onClick={() => removeDomain(d.id)} style={{ ...btnSm, color: T.red, fontSize: 10, marginTop: 12 }}>この領域を削除</button>
         </div>)}
       </div>);
     })}
 
-    {/* Add domain */}
     {addingDomain ? (<div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 10, padding: "14px 18px", marginTop: 8 }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <input value={newDomain.emoji} onChange={e => setNewDomain(p => ({...p, emoji: e.target.value}))} placeholder="絵文字" style={{ ...inputBase, width: 50, textAlign: "center" }} maxLength={2} />
-        <input value={newDomain.name} onChange={e => setNewDomain(p => ({...p, name: e.target.value}))} placeholder="領域名（例: 本業DX）" style={{ ...inputBase, flex: 1 }} autoFocus onKeyDown={e => e.key === "Enter" && addDomain()} />
-      </div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
-        {DOMAIN_COLORS.map(c => (<div key={c} onClick={() => setNewDomain(p => ({...p, color: c}))} style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", border: newDomain.color === c ? "2px solid #fff" : "2px solid transparent" }} />))}
-      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}><input value={newDomain.emoji} onChange={e => setNewDomain(p => ({...p, emoji: e.target.value}))} placeholder="絵文字" style={{ ...inputBase, width: 50, textAlign: "center" }} maxLength={2} /><input value={newDomain.name} onChange={e => setNewDomain(p => ({...p, name: e.target.value}))} placeholder="領域名（例: 本業DX）" style={{ ...inputBase, flex: 1 }} autoFocus onKeyDown={e => e.key === "Enter" && addDomain()} /></div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>{DOMAIN_COLORS.map(c => (<div key={c} onClick={() => setNewDomain(p => ({...p, color: c}))} style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", border: newDomain.color === c ? "2px solid #fff" : "2px solid transparent" }} />))}</div>
       <div style={{ display: "flex", gap: 8 }}><button onClick={addDomain} style={{ ...btnPrimary, padding: "6px 14px" }}>追加</button><button onClick={() => setAddingDomain(false)} style={{ ...btnSm, color: T.textMuted }}>キャンセル</button></div>
-    </div>) : (
-      <button onClick={() => setAddingDomain(true)} style={{ ...btnSm, color: T.textMuted, border: "1px dashed " + T.border, padding: "8px 16px", width: "100%", marginTop: 8 }}>+ 領域を追加</button>
-    )}
+    </div>) : (<button onClick={() => setAddingDomain(true)} style={{ ...btnSm, color: T.textMuted, border: "1px dashed " + T.border, padding: "8px 16px", width: "100%", marginTop: 8 }}>+ 領域を追加</button>)}
 
-    {/* Vision History & Pattern Interrupts */}
-    {data.forge.visionHistory?.length > 0 && (<div style={{ marginTop: 24 }}>
-      <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Vision の変遷</div>
-      {data.forge.visionHistory.map((v, i) => (<div key={i} style={{ display: "flex", gap: 8, padding: "4px 0", borderBottom: "1px solid " + T.border + "44", fontSize: 11 }}><span style={{ color: T.textDim, fontFamily: "var(--fm)", flexShrink: 0 }}>{v.date}</span><span style={{ color: T.textMuted, fontFamily: "var(--fc)" }}>{v.text}</span></div>))}
-    </div>)}
-    <div style={{ marginTop: 24 }}>
-      <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Pattern Interrupts</div>
-      {(data.forge.patternInterrupts || []).map(pi => (<div key={pi.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid " + T.border + "44" }}><span style={{ fontFamily: "var(--fm)", fontSize: 11, color: T.accent, fontWeight: 600, flexShrink: 0 }}>{pi.time}</span><span style={{ fontSize: 12, color: T.text, fontFamily: "var(--fc)" }}>{pi.question}</span></div>))}
-    </div>
+    {data.forge.visionHistory?.length > 0 && (<div style={{ marginTop: 24 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Vision の変遷</div>{data.forge.visionHistory.map((v, i) => (<div key={i} style={{ display: "flex", gap: 8, padding: "4px 0", borderBottom: "1px solid " + T.border + "44", fontSize: 11 }}><span style={{ color: T.textDim, fontFamily: "var(--fm)", flexShrink: 0 }}>{v.date}</span><span style={{ color: T.textMuted, fontFamily: "var(--fc)" }}>{v.text}</span></div>))}</div>)}
+    <div style={{ marginTop: 24 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Pattern Interrupts</div>{(data.forge.patternInterrupts || []).map(pi => (<div key={pi.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid " + T.border + "44" }}><span style={{ fontFamily: "var(--fm)", fontSize: 11, color: T.accent, fontWeight: 600, flexShrink: 0 }}>{pi.time}</span><span style={{ fontSize: 12, color: T.text, fontFamily: "var(--fc)" }}>{pi.question}</span></div>))}</div>
   </div>);
 
   // ═══════ MIRROR ═══════
@@ -497,19 +448,11 @@ export default function ForgePage() {
     <div style={{ marginBottom: 12 }}><h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Mirror</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>ありのままを映す。事実だけ。</div></div>
     <div style={{ flex: 1, overflowY: "auto", padding: "4px 0", minHeight: 200 }}>
       {mirrorMessages.length === 0 && (<div style={{ textAlign: "center", padding: "32px 16px", color: T.textDim }}><div style={{ fontSize: 24, marginBottom: 8, opacity: 0.3 }}>◇</div><div style={{ fontSize: 12, fontFamily: "var(--fc)", lineHeight: 1.8 }}>何でも話しかけてください。<br/>鏡はただ映すだけです。</div></div>)}
-      {mirrorMessages.map((msg, i) => (<div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", marginBottom: 8, padding: "0 4px" }}>
-        <div style={{ maxWidth: "80%", padding: "8px 12px", borderRadius: 10, background: msg.role === "user" ? T.accent + "20" : T.surface, border: "1px solid " + (msg.role === "user" ? T.accent + "30" : T.border) }}>
-          <div style={{ fontSize: 12, color: T.text, lineHeight: 1.7, fontFamily: "var(--fc)", whiteSpace: "pre-wrap" }}>{msg.text}</div>
-          <div style={{ fontSize: 9, color: T.textDim, marginTop: 3, textAlign: "right" }}>{msg.time}</div>
-        </div>
-      </div>))}
+      {mirrorMessages.map((msg, i) => (<div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", marginBottom: 8, padding: "0 4px" }}><div style={{ maxWidth: "80%", padding: "8px 12px", borderRadius: 10, background: msg.role === "user" ? T.accent + "20" : T.surface, border: "1px solid " + (msg.role === "user" ? T.accent + "30" : T.border) }}><div style={{ fontSize: 12, color: T.text, lineHeight: 1.7, fontFamily: "var(--fc)", whiteSpace: "pre-wrap" }}>{msg.text}</div><div style={{ fontSize: 9, color: T.textDim, marginTop: 3, textAlign: "right" }}>{msg.time}</div></div></div>))}
       {aiLoading && (<div style={{ padding: "8px 12px", borderRadius: 10, background: T.surface, border: "1px solid " + T.border, display: "inline-block", marginLeft: 4 }}><div style={{ fontSize: 12, color: T.textDim }}>...</div></div>)}
       <div ref={chatEndRef} />
     </div>
-    <div style={{ display: "flex", gap: 6, padding: "10px 0 4px", borderTop: "1px solid " + T.border }}>
-      <input value={mirrorInput} onChange={e => setMirrorInput(e.target.value)} placeholder="鏡に向かって話す..." style={{ ...inputBase, flex: 1, fontSize: 13, padding: "8px 12px" }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMirrorMessage(); } }} />
-      <button onClick={sendMirrorMessage} disabled={aiLoading || !mirrorInput.trim()} style={{ ...btnPrimary, padding: "8px 16px", opacity: aiLoading || !mirrorInput.trim() ? 0.4 : 1 }}>送信</button>
-    </div>
+    <div style={{ display: "flex", gap: 6, padding: "10px 0 4px", borderTop: "1px solid " + T.border }}><input value={mirrorInput} onChange={e => setMirrorInput(e.target.value)} placeholder="鏡に向かって話す..." style={{ ...inputBase, flex: 1, fontSize: 13, padding: "8px 12px" }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMirrorMessage(); } }} /><button onClick={sendMirrorMessage} disabled={aiLoading || !mirrorInput.trim()} style={{ ...btnPrimary, padding: "8px 16px", opacity: aiLoading || !mirrorInput.trim() ? 0.4 : 1 }}>送信</button></div>
   </div>);
 
   // ═══════ HISTORY ═══════
@@ -531,20 +474,11 @@ export default function ForgePage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}><button onClick={prevMonth} style={{ ...btnSm, color: T.textMuted, border: "1px solid " + T.border, padding: "6px 12px" }}>←</button><span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{yr}年{mo+1}月</span><button onClick={nextMonth} style={{ ...btnSm, color: T.textMuted, border: "1px solid " + T.border, padding: "6px 12px" }}>→</button></div>
       <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 10, padding: "12px 10px", marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 6 }}>{["日","月","火","水","木","金","土"].map(d => (<div key={d} style={{ textAlign: "center", fontSize: 9, color: T.textDim, padding: "2px 0" }}>{d}</div>))}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
-          {cells.map((cell, i) => { if (!cell) return <div key={"e"+i} />; const isSel = historyDate === cell.date; return (
-            <div key={cell.date} onClick={() => !cell.isFuture && setHistoryDate(isSel ? null : cell.date)} style={{ aspectRatio: "1", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: isSel ? T.accent + "30" : cell.level > 0 ? dotColors[cell.level] : "transparent", border: cell.isToday ? "1.5px solid " + T.accent : isSel ? "1.5px solid " + T.accent : "1px solid " + (cell.level > 0 ? dotColors[cell.level] : T.border + "60"), cursor: cell.isFuture ? "default" : "pointer", opacity: cell.isFuture ? 0.3 : 1 }}>
-              <span style={{ fontSize: 11, color: cell.level >= 3 ? "#fff" : cell.isToday ? T.accent : cell.level > 0 ? T.accent : T.textDim, fontFamily: "var(--fm)", fontWeight: cell.isToday ? 600 : 400 }}>{cell.day}</span>
-            </div>); })}
-        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>{cells.map((cell, i) => { if (!cell) return <div key={"e"+i} />; const isSel = historyDate === cell.date; return (<div key={cell.date} onClick={() => !cell.isFuture && setHistoryDate(isSel ? null : cell.date)} style={{ aspectRatio: "1", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: isSel ? T.accent + "30" : cell.level > 0 ? dotColors[cell.level] : "transparent", border: cell.isToday ? "1.5px solid " + T.accent : isSel ? "1.5px solid " + T.accent : "1px solid " + (cell.level > 0 ? dotColors[cell.level] : T.border + "60"), cursor: cell.isFuture ? "default" : "pointer", opacity: cell.isFuture ? 0.3 : 1 }}><span style={{ fontSize: 11, color: cell.level >= 3 ? "#fff" : cell.isToday ? T.accent : cell.level > 0 ? T.accent : T.textDim, fontFamily: "var(--fm)", fontWeight: cell.isToday ? 600 : 400 }}>{cell.day}</span></div>); })}</div>
       </div>
       {historyDate && (<div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 10, padding: "16px 18px" }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: T.accent, marginBottom: 12, fontFamily: "var(--fm)" }}>{dayLabel(historyDate)}</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          {sDl?.morningDone && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: T.morning + "20", color: T.morning }}>Morning ✓</span>}
-          {sDl?.eveningDone && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: T.evening + "20", color: T.evening }}>Evening ✓</span>}
-          {!sDl?.morningDone && <span style={{ fontSize: 9, color: T.textDim }}>記録なし</span>}
-        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>{sDl?.morningDone && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: T.morning + "20", color: T.morning }}>Morning ✓</span>}{sDl?.eveningDone && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: T.evening + "20", color: T.evening }}>Evening ✓</span>}{!sDl?.morningDone && <span style={{ fontSize: 9, color: T.textDim }}>記録なし</span>}</div>
         {sDl?.gratitude && <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}><span style={{ color: T.morning, fontWeight: 600, fontSize: 10, marginRight: 6 }}>感謝</span>{sDl.gratitude}</div>}
         {sDl?.top3 && (<div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.morning, textTransform: "uppercase", marginBottom: 6 }}>Top 3</div>{sDl.top3.map(t => { const dom = getDomain(t.domainId); return (<div key={t.id} style={{ display: "flex", gap: 6, padding: "4px 0", fontSize: 12 }}><span style={{ color: statusColors[t.status] }}>{statusIcons[t.status]}</span>{dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}<span style={{ color: t.status === "done" ? T.textDim : T.text }}>{t.text}</span></div>); })}</div>)}
         {sDl?.journal && (<div style={{ marginBottom: 12, padding: "8px 12px", background: T.surfaceAlt, borderRadius: 6, borderLeft: "2px solid " + T.evening }}><div style={{ fontSize: 10, fontWeight: 600, color: T.evening, textTransform: "uppercase", marginBottom: 4 }}>Journal</div><div style={{ fontSize: 12, color: T.text, lineHeight: 1.7, fontFamily: "var(--fc)" }}>{sDl.journal}</div></div>)}
@@ -558,23 +492,9 @@ export default function ForgePage() {
   // ═══════ LAYOUT ═══════
   const navItem = (n) => (<div key={n.id} onClick={() => setSection(n.id)} title={n.label} style={{ width: 38, height: 38, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: section === n.id ? T.accentDim : "transparent", color: section === n.id ? T.accent : T.textDim, fontSize: 14 }}><span>{n.icon}</span><span style={{ fontSize: 7, marginTop: 1 }}>{n.label}</span></div>);
   return (<div className="forge-shell">
-    <nav className="forge-sidebar">
-      <div style={{ fontSize: 18, marginBottom: 16, color: T.accent, fontWeight: 600, fontFamily: "var(--fc)" }}>F</div>
-      {NAV.map(navItem)}
-      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-        <div style={{ fontSize: 7, color: saveStatus === "saved" ? T.green : saveStatus === "saving" ? T.morning : saveStatus === "error" ? T.red : "transparent", textAlign: "center", lineHeight: 1.2 }}>{saveStatus === "saved" ? "保存済✓" : saveStatus === "saving" ? "保存中" : saveStatus === "error" ? "失敗" : "　"}</div>
-        <button onClick={logout} title="ログアウト" style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 10, padding: 4 }}>↩</button>
-      </div>
-    </nav>
-    <main className="forge-main">
-      {section === "today" && TodayView()}
-      {section === "foundation" && FoundationView()}
-      {section === "mirror" && MirrorView()}
-      {section === "history" && HistoryView()}
-    </main>
-    <nav className="forge-bottomnav">
-      {NAV.map(n => (<div key={n.id} onClick={() => setSection(n.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px", cursor: "pointer", color: section === n.id ? T.accent : T.textDim }}><span style={{ fontSize: 18 }}>{n.icon}</span><span style={{ fontSize: 9 }}>{n.label}</span></div>))}
-    </nav>
+    <nav className="forge-sidebar"><div style={{ fontSize: 18, marginBottom: 16, color: T.accent, fontWeight: 600, fontFamily: "var(--fc)" }}>F</div>{NAV.map(navItem)}<div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}><div style={{ fontSize: 7, color: saveStatus === "saved" ? T.green : saveStatus === "saving" ? T.morning : saveStatus === "error" ? T.red : "transparent", textAlign: "center", lineHeight: 1.2 }}>{saveStatus === "saved" ? "保存済✓" : saveStatus === "saving" ? "保存中" : saveStatus === "error" ? "失敗" : "　"}</div><button onClick={logout} title="ログアウト" style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 10, padding: 4 }}>↩</button></div></nav>
+    <main className="forge-main">{section === "today" && TodayView()}{section === "foundation" && FoundationView()}{section === "mirror" && MirrorView()}{section === "history" && HistoryView()}</main>
+    <nav className="forge-bottomnav">{NAV.map(n => (<div key={n.id} onClick={() => setSection(n.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px", cursor: "pointer", color: section === n.id ? T.accent : T.textDim }}><span style={{ fontSize: 18 }}>{n.icon}</span><span style={{ fontSize: 9 }}>{n.label}</span></div>))}</nav>
   </div>);
 }
 
