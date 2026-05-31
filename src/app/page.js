@@ -198,6 +198,13 @@ export default function ForgePage() {
   };
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mirrorMessages]);
 
+  // ORACLE: 保存済みの入力値を初回だけ画面に復元（早期returnより前＝フック規則を守る）
+  useEffect(() => {
+    const ip = data?.oracle?.input;
+    if (ip && !oSei && !oMei) { setOSei(ip.sei||""); setOMei(ip.mei||""); setOYomi(ip.yomi||""); setOAlt(ip.alt||""); setOBy(ip.by||""); setOBm(ip.bm||""); setOBd(ip.bd||""); setOStrokes(ip.strokes||{}); }
+    setOracleView(data?.oracle?.base ? "base" : "setup");
+  }, [data?.oracle]); // eslint-disable-line
+
   // ── Computed ──
   const nextInterrupt = useMemo(() => { if (!data) return null; return (data.forge.patternInterrupts || []).find(pi => pi.time > timeNow()) || null; }, [data, section, todayPhase]);
   const todayLogs = useMemo(() => data ? (data.forge.actionLog || []).filter(l => l.date === selectedDate).reverse() : [], [data, selectedDate]);
@@ -526,11 +533,6 @@ export default function ForgePage() {
   // ═══════ ORACLE handlers + view ═══════
   const oracleBase = data.oracle?.base || null;
   const oracleLogs = data.oracle?.logs || [];
-  useEffect(() => {
-    const ip = data.oracle?.input;
-    if (ip && !oSei && !oMei) { setOSei(ip.sei||""); setOMei(ip.mei||""); setOYomi(ip.yomi||""); setOAlt(ip.alt||""); setOBy(ip.by||""); setOBm(ip.bm||""); setOBd(ip.bd||""); setOStrokes(ip.strokes||{}); }
-    setOracleView(data.oracle?.base ? "base" : "setup");
-  }, [data.oracle]); // eslint-disable-line
 
   const oSeiChars = oSei.split(""); const oMeiChars = oMei.split("");
   const oAllChars = [...oSeiChars, ...oMeiChars];
