@@ -76,6 +76,9 @@ export default function ForgePage() {
   const [oStrokes, setOStrokes] = useState({});
   const [oConfirmed, setOConfirmed] = useState(false);
   const [oReflect, setOReflect] = useState("");
+  const [oHorizon, setOHorizon] = useState("1ヶ月");
+  const [oFaceImg, setOFaceImg] = useState(null); // {data, mediaType, preview}
+  const [oHandImg, setOHandImg] = useState(null);
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [editingDomainHeader, setEditingDomainHeader] = useState(null);
   const [domainHeaderDraft, setDomainHeaderDraft] = useState({ name: "", emoji: "" });
@@ -420,6 +423,13 @@ export default function ForgePage() {
     {renderEditableCard("北極星", data.forge.northStar, "northStar", T.accent, "自分の人生を一文で", false, "自分はどこに向かうのか？")}
     {renderEditableCard("存在意義", data.forge.reasonForBeing, "reasonForBeing", "#7A2A10", "自分はなぜここにいるのか", true, "なぜ存在しているのか？何のために？")}
     {renderEditableCard("価値観", data.forge.values, "values", "#534AB7", "自分が信じること、大切にすること", true, "何を信じ、何を大切にしているか？")}
+    <div style={{ background: T.surface, border: "1px solid " + (oracleBase ? T.accent + "55" : T.border), borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: oracleBase ? 8 : 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: oracleBase ? T.accent : T.textDim, textTransform: "uppercase", letterSpacing: "0.06em" }}>✷ 命式 — 生まれ持った核</div>
+        <button onClick={() => setSection("oracle")} style={{ ...btnSm, fontSize: 10, color: T.textMuted, border: "1px solid " + T.border, borderRadius: 6, padding: "3px 8px" }}>{oracleBase ? "詳しく見る" : "設定する"}</button>
+      </div>
+      {oracleBase ? (<div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.6, marginBottom: 8 }}>{oracleBase.headline}</div><div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{(oracleBase.essence||[]).map((e,i) => <div key={i} style={{ fontSize: 12, color: T.textMuted, paddingLeft: 10, borderLeft: "2px solid " + T.accent + "66" }}>{e}</div>)}</div></div>) : (<div style={{ fontSize: 12, color: T.textDim, marginTop: 6 }}>複数の占術から「生まれ持った型」を読み解きます。Oracleタブで設定できます。</div>)}
+    </div>
 
     <div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 28, marginBottom: 10 }}>Core — 恐怖と方向</div>
     {renderEditableCard("Anti-Vision — 燃料", data.forge.antiVision, "antiVision", T.coral, "「絶対にこうなりたくない」を一文で", true)}
@@ -541,8 +551,8 @@ export default function ForgePage() {
   const oAllValid = oAllChars.length > 0 && [...oSeiStrokes, ...oMeiStrokes].every((s) => typeof s === "number" && s > 0);
   const oPreview = oAllValid ? O_seimei(oSeiStrokes, oMeiStrokes) : null;
 
-  const oCallAPI = async (prompt, maxTokens) => { const res = await fetch("/api/oracle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, maxTokens }) }); const j = await res.json(); if (j.error) throw new Error(j.error); return j.text || ""; };
-  const saveOracle = (base, logs, input) => setData(d => ({ ...d, oracle: { base, logs, input } }));
+  const oCallAPI = async (prompt, maxTokens, images) => { const res = await fetch("/api/oracle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, maxTokens, images }) }); const j = await res.json(); if (j.error) throw new Error(j.error); return j.text || ""; };
+  const patchOracle = (patch) => setData(d => ({ ...d, oracle: { ...(d.oracle || {}), ...patch } }));
 
   const oGenerateBase = async () => {
     setOErr("");
@@ -565,7 +575,7 @@ strengths/cautionsは各3つ。`;
       const parsed = JSON.parse(O_stripJSON(raw));
       const nb = { ...parsed, calc, meta: { sei: oSei, mei: oMei, yomi: oYomi, y, m, d } };
       setOShowDetail(false); setOracleView("base");
-      saveOracle(nb, oracleLogs, { sei: oSei, mei: oMei, yomi: oYomi, alt: oAlt, by: oBy, bm: oBm, bd: oBd, strokes: oStrokes });
+      patchOracle({ base: nb, input: { sei: oSei, mei: oMei, yomi: oYomi, alt: oAlt, by: oBy, bm: oBm, bd: oBd, strokes: oStrokes } });
     } catch (e) { setOErr("生成に失敗しました。もう一度。(" + e.message + ")"); }
     setOLoading(false);
   };
@@ -582,10 +592,99 @@ strengths/cautionsは各3つ。`;
       const text = await oCallAPI(prompt, 800);
       const nl = [{ date: todayStr(), reflection: txt, reading: text.trim(), ts: Date.now() }, ...oracleLogs];
       setOReflect("");
-      saveOracle(oracleBase, nl, data.oracle?.input || { sei: oSei, mei: oMei, yomi: oYomi, alt: oAlt, by: oBy, bm: oBm, bd: oBd, strokes: oStrokes });
+      patchOracle({ logs: nl });
     } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
     setOLoading(false);
   };
+
+  // 中長期レビュー
+  const oReviews = data.oracle?.reviews || [];
+  const oGatherReflections = (limit) => {
+    const dl = data.forge?.dailyLog || {};
+    const dates = Object.keys(dl).sort().reverse().slice(0, limit);
+    const parts = dates.map(dt => { const e = dl[dt]; const bits = []; if (e.journal) bits.push("振返:" + e.journal); if (e.gratitude) bits.push("感謝:" + e.gratitude); if (e.visionCheck) bits.push("確認:" + e.visionCheck); if (e.top3) bits.push("Top3:" + e.top3.map(t => t.text + "(" + (t.status||"") + ")").join("/")); return bits.length ? dt + " " + bits.join(" ") : null; }).filter(Boolean);
+    const oLogTxt = (data.oracle?.logs || []).slice(0, limit).map(l => l.date + " " + l.reflection).filter(Boolean);
+    return { daily: parts, oracleDaily: oLogTxt };
+  };
+  const oGenerateReview = async () => {
+    if (!oracleBase) return;
+    setOErr(""); setOLoading(true);
+    const limitMap = { "1ヶ月": 31, "3ヶ月": 60, "半年": 90, "1年": 120, "3年": 150, "10年+": 150 };
+    const g = oGatherReflections(limitMap[oHorizon] || 60);
+    const longHorizon = ["1年", "3年", "10年+"].includes(oHorizon);
+    const prompt = `あなたは複数の占術を統合する熟練の鑑定士です。この人の「中長期レビュー（${oHorizon}）」を書いてください。
+
+【命式（固定の型）】${oracleBase.headline}／要点:${(oracleBase.essence||[]).join("・")}／収束:${(oracleBase.convergence||[]).map(c=>c.theme).join("、")}／運の流れ:${oracleBase.timing}
+【最近の振り返り記録】${g.daily.slice(0, 30).join(" ｜ ") || "（記録少なめ）"}
+【最近の型解釈ログ】${g.oracleDaily.slice(0, 15).join(" ｜ ") || "（なし）"}
+
+【書き方】
+- 時間軸は「${oHorizon}」。${longHorizon ? "長期なので命式（生まれ持った大きな流れ・運の周期）を主役にし、日々の記録は補助的に使う。" : "短中期なので最近の行動記録を主役にし、命式はレンズとして使う。"}
+- 予言ではなく「この期間、あなたの型から見るとこういう流れにある。だからこう構えると流れに乗れる」という解釈。
+- 「〜すべき」でなく流れに乗る言い方。具体的に。300字程度。
+- 最後に、この期間の小さな指針を1つ。
+プレーンテキストのみ。`;
+    try {
+      const text = await oCallAPI(prompt, 1200);
+      const nr = [{ horizon: oHorizon, date: todayStr(), text: text.trim(), ts: Date.now() }, ...oReviews];
+      patchOracle({ reviews: nr });
+    } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
+    setOLoading(false);
+  };
+
+  // 顔相・手相
+  const oPhysio = data.oracle?.physiognomy || [];
+  const oReadImage = (file, setter) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1024; let { width, height } = img;
+        if (width > max || height > max) { const r = Math.min(max / width, max / height); width = Math.round(width * r); height = Math.round(height * r); }
+        const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        setter({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", preview: dataUrl });
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  const oGeneratePhysiognomy = async () => {
+    if (!oFaceImg && !oHandImg) { setOErr("顔または手のひらの写真を選んでください"); return; }
+    setOErr(""); setOLoading(true);
+    const prev = oPhysio[0];
+    const images = [];
+    if (oFaceImg) images.push({ data: oFaceImg.data, mediaType: oFaceImg.mediaType });
+    if (oHandImg) images.push({ data: oHandImg.data, mediaType: oHandImg.mediaType });
+    const prompt = `あなたは観相学（顔相・手相）の熟練鑑定士です。${oFaceImg ? "顔写真" : ""}${oFaceImg && oHandImg ? "と" : ""}${oHandImg ? "手のひら写真" : ""}を読み解いてください。
+${oracleBase ? `この人の命式（参考）：${oracleBase.headline}／${(oracleBase.essence||[]).join("・")}` : ""}
+${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回からの変化があれば必ず指摘してください（観相学では相は心の状態を映し、変化します）。` : ""}
+
+【書き方】
+- 予言ではなく「今のあなたの状態が相にこう表れている」という自己理解の鏡として。
+- ${oFaceImg ? "顔相（表情の傾向・気の充実・対人面）" : ""}${oHandImg ? "／手相（生命線・知能線・感情線などの印象）" : ""}を具体的に。
+- 過度に断定せず、相が示す傾向として。250字程度。${prev ? "前回との変化を1文入れる。" : ""}
+プレーンテキストのみ。`;
+    try {
+      const text = await oCallAPI(prompt, 1000, images);
+      const np = [{ date: todayStr(), text: text.trim(), hasFace: !!oFaceImg, hasHand: !!oHandImg, ts: Date.now() }, ...oPhysio];
+      patchOracle({ physiognomy: np });
+      setOFaceImg(null); setOHandImg(null);
+    } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
+    setOLoading(false);
+  };
+
+  // 暦の節目チェック
+  const oCheckpoint = (() => {
+    const d = new Date(); const day = d.getDate(); const mon = d.getMonth() + 1;
+    if (mon === 1 && day === 1) return "新年";
+    if (oracleBase?.meta && d.getMonth() + 1 === oracleBase.meta.m && day === oracleBase.meta.d) return "誕生日";
+    if (day === 1 && [1, 4, 7, 10].includes(mon)) return "四半期初め";
+    if (day === 1) return "月初め";
+    return null;
+  })();
 
   const oChip = { fontSize: 13, padding: "6px 12px", borderRadius: 6, background: T.surfaceAlt, border: "1px solid " + T.border, color: T.text };
   const oLab = { fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: "var(--fm)" };
@@ -594,7 +693,7 @@ strengths/cautionsは各3つ。`;
   const OracleView = () => (<div>
     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
       <div><h1 style={{ fontSize: 24, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Oracle</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>複数の占術を三角測量する自己理解の鏡</div></div>
-      {oracleBase && <div style={{ display: "flex", gap: 6 }}>{[["base","結果"],["daily","型から見た今日"],["setup","再設定"]].map(([id,lb]) => <button key={id} onClick={() => setOracleView(id)} style={{ ...btnSm, border: "1px solid "+(oracleView===id?T.accent:T.border), color: oracleView===id?T.accent:T.textMuted, borderRadius: 8, padding: "5px 10px" }}>{lb}</button>)}</div>}
+      {oracleBase && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[["base","結果"],["daily","型から見た今日"],["review","中長期"],["physio","相"],["setup","再設定"]].map(([id,lb]) => <button key={id} onClick={() => setOracleView(id)} style={{ ...btnSm, border: "1px solid "+(oracleView===id?T.accent:T.border), color: oracleView===id?T.accent:T.textMuted, borderRadius: 8, padding: "5px 10px" }}>{lb}</button>)}</div>}
     </div>
     {oErr && <div style={{ background: T.surface, border: "1px solid "+T.red, borderRadius: 8, padding: "12px 14px", color: T.red, fontSize: 13, marginBottom: 12 }}>{oErr}</div>}
 
@@ -662,6 +761,26 @@ strengths/cautionsは各3つ。`;
         {getDailyLog().journal && <button onClick={() => oGenerateDaily(getDailyLog().journal)} disabled={oLoading} style={{ ...btnSm, border: "1px solid "+T.border, color: T.textMuted, borderRadius: 8, padding: "7px 12px", opacity: oLoading?0.5:1 }}>今夜のジャーナルを使う</button>}
       </div>
       <div style={{ marginTop: 22 }}>{oracleLogs.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだ記録がありません。</div>}{oracleLogs.map((l,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.textDim, marginBottom: 8, fontFamily: "var(--fm)" }}>{l.date}</div><div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, marginBottom: 10, paddingLeft: 10, borderLeft: "2px solid "+T.border }}>{l.reflection}</div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.8 }}>{l.reading}</div></div>)}</div>
+    </div>)}
+
+    {oracleView === "review" && oracleBase && (<div>
+      {oCheckpoint && <div style={{ background: T.accentDim, border: "1px solid "+T.accent+"55", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: T.accent }}>今日は「{oCheckpoint}」です。節目のレビューを残すのに良いタイミングです。</div>}
+      <div style={oLab}>時間軸を選ぶ</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{["1ヶ月","3ヶ月","半年","1年","3年","10年+"].map(h => <button key={h} onClick={() => setOHorizon(h)} style={{ ...btnSm, padding: "6px 12px", borderRadius: 8, border: "1px solid "+(oHorizon===h?T.accent:T.border), color: oHorizon===h?T.accent:T.textMuted, background: oHorizon===h?T.accentDim:"transparent" }}>{h}</button>)}</div>
+      <button onClick={oGenerateReview} disabled={oLoading} style={{ ...btnPrimary, opacity: oLoading?0.5:1 }}>{oLoading ? "読み解き中…" : oHorizon + "の流れを読む"}</button>
+      <div style={{ fontSize: 11, color: T.textDim, marginTop: 8, lineHeight: 1.7 }}>短い時間軸ほど最近の行動記録、長い時間軸ほど命式（生まれ持った流れ）が主役になります。</div>
+      <div style={{ marginTop: 22 }}>{oReviews.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだレビューがありません。</div>}{oReviews.map((r,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.accent, marginBottom: 8, fontFamily: "var(--fm)" }}>{r.horizon}　<span style={{ color: T.textDim }}>{r.date}</span></div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>{r.text}</div></div>)}</div>
+    </div>)}
+
+    {oracleView === "physio" && oracleBase && (<div>
+      <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.7, marginBottom: 14 }}>顔相・手相は心の状態を映し、ゆっくり変化します。節目ごとに撮ると<b style={{ color: T.textMuted }}>変化を追える</b>のが狙いです。正確に追うため、毎回<b style={{ color: T.textMuted }}>正面・無表情・明るい場所</b>で撮ってください。</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <div><div style={oLab}>顔写真（正面）</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOFaceImg)} style={{ fontSize: 11, color: T.textMuted }} />{oFaceImg && <img src={oFaceImg.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 160, objectFit: "cover" }} />}</div>
+        <div><div style={oLab}>手のひら写真</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOHandImg)} style={{ fontSize: 11, color: T.textMuted }} />{oHandImg && <img src={oHandImg.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 160, objectFit: "cover" }} />}</div>
+      </div>
+      <button onClick={oGeneratePhysiognomy} disabled={oLoading || (!oFaceImg && !oHandImg)} style={{ ...btnPrimary, opacity: (oLoading || (!oFaceImg && !oHandImg))?0.5:1 }}>{oLoading ? "読み解き中…" : "相を読む"}</button>
+      <div style={{ fontSize: 10, color: T.textDim, marginTop: 8 }}>※ 写真は読み解きに使うだけで保存しません。残るのは読み解き結果と日付だけです。</div>
+      <div style={{ marginTop: 22 }}>{oPhysio.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだ記録がありません。</div>}{oPhysio.map((p,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.textDim, marginBottom: 8, fontFamily: "var(--fm)" }}>{p.date}　{p.hasFace && "顔相"}{p.hasFace && p.hasHand && "・"}{p.hasHand && "手相"}{i === 0 && oPhysio.length > 1 && <span style={{ color: T.accent }}>　最新</span>}</div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>{p.text}</div></div>)}</div>
     </div>)}
   </div>);
 
