@@ -46,6 +46,12 @@ const O_STROKES = { 舛:6,野:11,充:6,田:5,中:4,山:3,川:3,木:4,本:5,林:8
 const O_KANA = { あ:"a",い:"i",う:"u",え:"e",お:"o",か:"ka",き:"ki",く:"ku",け:"ke",こ:"ko",さ:"sa",し:"shi",す:"su",せ:"se",そ:"so",た:"ta",ち:"chi",つ:"tsu",て:"te",と:"to",な:"na",に:"ni",ぬ:"nu",ね:"ne",の:"no",は:"ha",ひ:"hi",ふ:"fu",へ:"he",ほ:"ho",ま:"ma",み:"mi",む:"mu",め:"me",も:"mo",や:"ya",ゆ:"yu",よ:"yo",ら:"ra",り:"ri",る:"ru",れ:"re",ろ:"ro",わ:"wa",を:"o",ん:"n",が:"ga",ぎ:"gi",ぐ:"gu",げ:"ge",ご:"go",ざ:"za",じ:"ji",ず:"zu",ぜ:"ze",ぞ:"zo",だ:"da",で:"de",ど:"do",ば:"ba",び:"bi",ぶ:"bu",べ:"be",ぼ:"bo",ぱ:"pa",ぴ:"pi",ぷ:"pu",ぺ:"pe",ぽ:"po",きゃ:"kya",きゅ:"kyu",きょ:"kyo",しゃ:"sha",しゅ:"shu",しょ:"sho",ちゃ:"cha",ちゅ:"chu",ちょ:"cho",りゃ:"rya",りゅ:"ryu",りょ:"ryo" };
 const O_kanaToRomaji = (kana) => { let r = "", i = 0; const s = (kana||"").replace(/\s/g, ""); while (i < s.length) { const two = s.slice(i, i + 2); if (O_KANA[two]) { r += O_KANA[two]; i += 2; continue; } const one = s[i]; if (one === "っ" && i + 1 < s.length) { const nx = O_KANA[s[i + 1]] || ""; r += nx[0] || ""; i++; continue; } r += O_KANA[one] || ""; i++; } return r; };
 const O_stripJSON = (t) => { const m = t.match(/\{[\s\S]*\}/); return m ? m[0] : t.replace(/```json|```/g, "").trim(); };
+async function O_api(prompt, maxTokens, images) { const res = await fetch("/api/oracle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, maxTokens: maxTokens || 1000, images }) }); const j = await res.json(); if (j.error) throw new Error(j.error); return j.text || ""; }
+const O_dailyPrompt = (base, todayText, age) => `この人の固定の型：${base.headline}。要点：${(base.essence||[]).join("／")}。収束：${(base.convergence||[]).map(c=>c.theme).join("、")}。${age!=null?`現在${age}歳。`:""}
+【今日の記録（FORGE）】${todayText}
+この人の「型」というレンズで今日を読み解き、さらに明日の流れを示してください。
+以下のJSON【のみ】で返答（前置き不要）：
+{"today":"今日の記録を型から見た解釈。運勢予報でなく『あなたの型から見ると今日のこれはこう』。『〜すべき』でなく流れに乗る言い方。具体的に150〜200字。最後に小さな次の一歩を一つ。","tomorrow":"明日はどんな流れの日になりそうか。今日の状態と型から見た、明日への構え。100字程度、軽め、断定しすぎない。"}`;
 
 export default function ForgePage() {
   const { data, setData, loading, saveStatus, logout } = useForgeData();
@@ -209,6 +215,32 @@ export default function ForgePage() {
     if (ip && !oSei && !oMei) { setOSei(ip.sei||""); setOMei(ip.mei||""); setOYomi(ip.yomi||""); setOAlt(ip.alt||""); setOBy(ip.by||""); setOBm(ip.bm||""); setOBd(ip.bd||""); setOStrokes(ip.strokes||{}); }
     setOracleView(data?.oracle?.base ? "base" : "setup");
   }, [data?.oracle]); // eslint-disable-line
+
+  // ORACLE: Todayデータが入っていれば「型から見た今日」を自動生成（1日1回）
+  const oAutoRef = useRef("");
+  useEffect(() => {
+    if (oracleView !== "daily") return;
+    const base = data?.oracle?.base; if (!base) return;
+    const today = todayStr();
+    const dl = (data?.forge?.dailyLog || {})[today] || {};
+    const txt = [dl.journal, dl.gratitude, dl.visionCheck].filter(Boolean).join(" ");
+    if (!txt) return;
+    if ((data?.oracle?.logs || []).some(l => l.date === today)) return; // 今日は生成済み
+    if (oAutoRef.current === today) return; // 多重起動防止
+    oAutoRef.current = today;
+    (async () => {
+      setOLoading(true);
+      try {
+        const age = base.meta ? O_age(base.meta.y, base.meta.m, base.meta.d) : null;
+        const raw = await O_api(O_dailyPrompt(base, txt, age), 1000);
+        let td = raw, tm = "";
+        try { const p = JSON.parse(O_stripJSON(raw)); td = p.today || raw; tm = p.tomorrow || ""; } catch {}
+        const log = { date: today, reflection: txt, reading: td, tomorrow: tm, ts: Date.now(), auto: true };
+        setData(d => ({ ...d, oracle: { ...(d.oracle || {}), logs: [log, ...((d.oracle && d.oracle.logs) || [])] } }));
+      } catch (e) { /* 自動生成の失敗は黙って無視 */ }
+      setOLoading(false);
+    })();
+  }, [oracleView, data?.oracle?.base, data?.forge?.dailyLog]); // eslint-disable-line
 
   // ── Computed ──
   const nextInterrupt = useMemo(() => { if (!data) return null; return (data.forge.patternInterrupts || []).find(pi => pi.time > timeNow()) || null; }, [data, section, todayPhase]);
@@ -593,15 +625,43 @@ strengths/cautionsは各3つ。`;
     const txt = (reflectText || oReflect).trim();
     if (!txt || !oracleBase) return;
     setOErr(""); setOLoading(true);
-    const conv = (oracleBase.convergence || []).map((c) => c.theme).join("、");
-    const prompt = `この人の固定の型：${oracleBase.headline}。要点：${(oracleBase.essence||[]).join("／")}。収束：${conv}。
-【今日の振り返り】${txt}
-この人の「型」というレンズで今日を読み解いてください。運勢予報ではなく「あなたの型から見ると今日のこれはこう」という解釈。「〜すべき」でなく流れに乗る言い方で。150〜200字、温かく、具体的な小さな次の一歩を一つ。プレーンテキストのみ。`;
+    const age = oracleBase.meta ? O_age(oracleBase.meta.y, oracleBase.meta.m, oracleBase.meta.d) : null;
     try {
-      const text = await oCallAPI(prompt, 800);
-      const nl = [{ date: todayStr(), reflection: txt, reading: text.trim(), ts: Date.now() }, ...oracleLogs];
+      const raw = await oCallAPI(O_dailyPrompt(oracleBase, txt, age), 1000);
+      let td = raw, tm = "";
+      try { const p = JSON.parse(O_stripJSON(raw)); td = p.today || raw; tm = p.tomorrow || ""; } catch {}
+      const today = todayStr();
+      const nl = [{ date: today, reflection: txt, reading: td, tomorrow: tm, ts: Date.now() }, ...oracleLogs.filter(l => l.date !== today)];
       setOReflect("");
       patchOracle({ logs: nl });
+    } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
+    setOLoading(false);
+  };
+
+  // 統合（命式＋相＋蓄積）を1つの結果に
+  const oSynthesis = data.oracle?.synthesis || null;
+  const oGenerateSynthesis = async () => {
+    if (!oracleBase) return;
+    setOErr(""); setOLoading(true);
+    const latestPhysio = (data.oracle?.physiognomy || [])[0];
+    const g = oGatherReflections("1年");
+    const age = oracleBase.meta ? O_age(oracleBase.meta.y, oracleBase.meta.m, oracleBase.meta.d) : null;
+    const prompt = `あなたは複数の占術を統合する熟練の鑑定士です。次の3つの層を統合し、ひとつの一貫した「今のこの人」の読みを書いてください。
+${age != null ? `現在${age}歳。年齢は正確なので推測しないこと。` : ""}
+
+【層1｜命式（生まれ持った固定の型）】${oracleBase.headline}／要点:${(oracleBase.essence||[]).join("・")}／収束:${(oracleBase.convergence||[]).map(c=>c.theme).join("、")}／運の流れ:${oracleBase.timing}
+【層2｜相（今の状態が顔・手に表れたもの）】${latestPhysio ? latestPhysio.text : "（まだ相のデータなし）"}
+【層3｜これまでの歩み（FORGE蓄積から${g.total}日分の代表抜粋）】${g.parts.slice(0, 25).join(" ｜ ") || "（記録少なめ）"}
+
+【書き方 — 重要】
+- 3層を別々に並べるのではなく、織り合わせて1つの像にする。「生まれ持った型（層1）はこうで、今の相（層2）はこう表れ、これまでの歩み（層3）はこう動いてきた。だから今のあなたは○○という地点にいる」という統合。
+- 層が一致する点は「揺るがない核」、ズレる点は「いま変化の途上にある部分」として扱う。
+- バーナム効果（誰にでも当たる表現）厳禁。具体的に。予言でなく自己理解の鏡として。
+- 全体で400字程度。最後に「今いる地点」を一文で。
+プレーンテキストのみ。`;
+    try {
+      const text = await oCallAPI(prompt, 1500);
+      patchOracle({ synthesis: { text: text.trim(), date: todayStr(), ts: Date.now() } });
     } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
     setOLoading(false);
   };
@@ -628,7 +688,10 @@ strengths/cautionsは各3つ。`;
     setOErr(""); setOLoading(true);
     const g = oGatherReflections(oHorizon);
     const longHorizon = ["1年", "3年", "10年+"].includes(oHorizon);
-    const ageStr = oracleBase.meta ? `この人は現在${O_age(oracleBase.meta.y, oracleBase.meta.m, oracleBase.meta.d)}歳（${oracleBase.meta.y}年${oracleBase.meta.m}月${oracleBase.meta.d}日生）。年齢は正確なので推測しないこと。` : "";
+    const oMeta = oracleBase.meta || (data.oracle?.input && data.oracle.input.by ? { y: +data.oracle.input.by, m: +data.oracle.input.bm, d: +data.oracle.input.bd } : null);
+    const oAge = oMeta ? O_age(oMeta.y, oMeta.m, oMeta.d) : null;
+    const spanY = { "1ヶ月": 0, "3ヶ月": 0, "半年": 0, "1年": 1, "3年": 3, "10年+": 10 }[oHorizon] || 0;
+    const ageStr = oAge != null ? `【年齢の前提】現在の満年齢は${oAge}歳（${oMeta.y}年${oMeta.m}月${oMeta.d}日生）。この「${oHorizon}」が指すのは満${oAge}〜${oAge + spanY}歳ごろの期間。\n重要：現在の年齢（${oAge}歳）と、この先の期間が指す年齢を絶対に取り違えないこと。年齢に触れるときは「今は${oAge}歳」「この先${oAge + spanY}歳ごろにかけて」のように、現在か未来かを必ず明示すること。` : "";
     const prompt = `あなたは複数の占術を統合する熟練の鑑定士です。この人の「中長期レビュー（${oHorizon}）」を書いてください。
 ${ageStr}
 
@@ -716,7 +779,7 @@ ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回�
   const OracleView = () => (<div>
     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
       <div><h1 style={{ fontSize: 24, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Oracle</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>複数の占術を三角測量する自己理解の鏡</div></div>
-      {oracleBase && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[["base","結果"],["daily","型から見た今日"],["review","中長期"],["physio","相"],["setup","再設定"]].map(([id,lb]) => <button key={id} onClick={() => setOracleView(id)} style={{ ...btnSm, border: "1px solid "+(oracleView===id?T.accent:T.border), color: oracleView===id?T.accent:T.textMuted, borderRadius: 8, padding: "5px 10px" }}>{lb}</button>)}</div>}
+      {oracleBase && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[["synthesis","統合"],["base","結果"],["daily","型から見た今日"],["review","中長期"],["physio","相"],["setup","再設定"]].map(([id,lb]) => <button key={id} onClick={() => setOracleView(id)} style={{ ...btnSm, border: "1px solid "+(oracleView===id?T.accent:T.border), color: oracleView===id?T.accent:T.textMuted, borderRadius: 8, padding: "5px 10px" }}>{lb}</button>)}</div>}
     </div>
     {oErr && <div style={{ background: T.surface, border: "1px solid "+T.red, borderRadius: 8, padding: "12px 14px", color: T.red, fontSize: 13, marginBottom: 12 }}>{oErr}</div>}
 
@@ -778,12 +841,27 @@ ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回�
     </div>)}
 
     {oracleView === "daily" && oracleBase && (<div>
-      <div style={{ marginBottom: 10 }}><div style={oLab}>今日の振り返り</div><textarea style={{ ...inputBase, width: "100%", minHeight: 90, resize: "vertical" }} value={oReflect} onChange={e => setOReflect(e.target.value)} placeholder="今日あったこと・感じたこと…" /></div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => oGenerateDaily()} disabled={oLoading || !oReflect.trim()} style={{ ...btnPrimary, opacity: (oLoading||!oReflect.trim())?0.5:1 }}>{oLoading ? "読み解き中…" : "型から読み解く"}</button>
-        {getDailyLog().journal && <button onClick={() => oGenerateDaily(getDailyLog().journal)} disabled={oLoading} style={{ ...btnSm, border: "1px solid "+T.border, color: T.textMuted, borderRadius: 8, padding: "7px 12px", opacity: oLoading?0.5:1 }}>今夜のジャーナルを使う</button>}
-      </div>
-      <div style={{ marginTop: 22 }}>{oracleLogs.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだ記録がありません。</div>}{oracleLogs.map((l,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.textDim, marginBottom: 8, fontFamily: "var(--fm)" }}>{l.date}</div><div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, marginBottom: 10, paddingLeft: 10, borderLeft: "2px solid "+T.border }}>{l.reflection}</div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.8 }}>{l.reading}</div></div>)}</div>
+      {(() => { const t = todayStr(); const dl = getDailyLog(t); const src = [dl.journal, dl.gratitude, dl.visionCheck].filter(Boolean).join(" "); const hasToday = (oracleLogs || []).some(l => l.date === t);
+        return (<div style={{ marginBottom: 14 }}>
+          {src ? <div style={{ background: T.surfaceAlt, border: "1px solid "+T.border, borderRadius: 8, padding: "10px 14px", fontSize: 12, color: T.textMuted, lineHeight: 1.6 }}><span style={{ color: T.textDim }}>今日のTodayデータ：</span>{src}</div>
+               : <div style={{ fontSize: 12, color: T.textDim }}>Todayタブで今日の振り返りを入れると、ここに型から見た解釈と明日の流れが自動で出ます。</div>}
+          {src && !hasToday && <div style={{ fontSize: 11, color: oLoading?T.accent:T.textDim, marginTop: 8 }}>{oLoading ? "型から読み解いています…" : "自動生成の準備中…（数秒）"}</div>}
+        </div>); })()}
+      <details style={{ marginBottom: 12 }}><summary style={{ fontSize: 11, color: T.textDim, cursor: "pointer" }}>自分で書いて読む（任意）</summary>
+        <div style={{ marginTop: 8 }}><textarea style={{ ...inputBase, width: "100%", minHeight: 80, resize: "vertical" }} value={oReflect} onChange={e => setOReflect(e.target.value)} placeholder="今日あったこと・感じたこと…" />
+        <button onClick={() => oGenerateDaily()} disabled={oLoading || !oReflect.trim()} style={{ ...btnPrimary, marginTop: 8, opacity: (oLoading||!oReflect.trim())?0.5:1 }}>{oLoading ? "読み解き中…" : "これで読み解く"}</button></div>
+      </details>
+      <div style={{ marginTop: 8 }}>{oracleLogs.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだ記録がありません。</div>}{oracleLogs.map((l,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.textDim, marginBottom: 8, fontFamily: "var(--fm)" }}>{l.date}{l.auto && <span style={{ color: T.textDim }}> ・自動</span>}</div><div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, marginBottom: 10, paddingLeft: 10, borderLeft: "2px solid "+T.border }}>{l.reflection}</div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.8 }}>{l.reading}</div>{l.tomorrow && <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid "+T.border }}><div style={{ fontSize: 10, color: T.evening, marginBottom: 4, fontFamily: "var(--fm)" }}>明日の流れ</div><div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>{l.tomorrow}</div></div>}</div>)}</div>
+    </div>)}
+
+    {oracleView === "synthesis" && oracleBase && (<div>
+      <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.7, marginBottom: 14 }}>命式（生まれ持った型）・相（今の顔/手）・これまでの歩み（FORGEの蓄積）の3層を織り合わせて、ひとつの「今のあなた」として読み解きます。</div>
+      <button onClick={oGenerateSynthesis} disabled={oLoading} style={{ ...btnPrimary, opacity: oLoading?0.5:1 }}>{oLoading ? "統合中…（数秒）" : oSynthesis ? "最新の情報で統合し直す" : "3層を統合して読む"}</button>
+      {!(data.oracle?.physiognomy||[]).length && <div style={{ fontSize: 11, color: T.textDim, marginTop: 8 }}>※「相」タブで顔・手を読むと、統合がさらに深くなります（なくても統合できます）。</div>}
+      {oSynthesis && (<div style={{ background: T.surface, border: "1px solid "+T.accent, borderRadius: 8, padding: "18px", marginTop: 16 }}>
+        <div style={{ fontSize: 10, color: T.accent, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, fontFamily: "var(--fm)" }}>統合された読み　<span style={{ color: T.textDim, textTransform: "none" }}>{oSynthesis.date}</span></div>
+        <div style={{ fontSize: 15, color: T.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{oSynthesis.text}</div>
+      </div>)}
     </div>)}
 
     {oracleView === "review" && oracleBase && (<div>
