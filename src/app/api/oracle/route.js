@@ -7,7 +7,18 @@ export async function POST(request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { prompt, maxTokens } = await request.json();
+  const { prompt, maxTokens, images } = await request.json();
+
+  // Build content: optional images (for 顔相/手相) + text
+  const content = [];
+  if (Array.isArray(images)) {
+    for (const img of images) {
+      if (img && img.data) {
+        content.push({ type: "image", source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data } });
+      }
+    }
+  }
+  content.push({ type: "text", text: prompt });
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -20,7 +31,7 @@ export async function POST(request) {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: maxTokens || 1500,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content }],
       }),
     });
 
