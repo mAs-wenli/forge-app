@@ -41,6 +41,7 @@ const O_yearPillar = (y) => O_STEMS[((y - 4) % 10 + 10) % 10] + O_BRANCHES[((y -
 const O_jdn = (y, m, d) => { const a = Math.floor((14 - m) / 12), yy = y + 4800 - a, mm = m + 12 * a - 3; return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045; };
 const O_dayPillar = (y, m, d) => { const i = ((O_jdn(y, m, d) % 60) + 47) % 60; return O_STEMS[i % 10] + O_BRANCHES[i % 12]; };
 const O_seimei = (sei, mei) => { if (!sei.length || !mei.length) return null; const tenkaku = sei.reduce((a, b) => a + b, 0), chikaku = mei.reduce((a, b) => a + b, 0), jinkaku = sei[sei.length - 1] + mei[0], soukaku = tenkaku + chikaku; return { tenkaku, jinkaku, chikaku, gaikaku: soukaku - jinkaku, soukaku }; };
+const O_age = (y, m, d) => { const n = new Date(); let age = n.getFullYear() - y; const had = (n.getMonth() + 1 > m) || (n.getMonth() + 1 === m && n.getDate() >= d); if (!had) age--; return age; };
 const O_STROKES = { 舛:6,野:11,充:6,田:5,中:4,山:3,川:3,木:4,本:5,林:8,森:12,村:7,松:8,井:4,小:3,大:3,太:4,子:3,一:1,二:2,三:3,正:5,平:5,光:6,明:8,和:8,健:11,翔:12,陽:12,真:10,優:17,花:7,香:9,愛:13,結:12,口:3,上:3,下:3 };
 const O_KANA = { あ:"a",い:"i",う:"u",え:"e",お:"o",か:"ka",き:"ki",く:"ku",け:"ke",こ:"ko",さ:"sa",し:"shi",す:"su",せ:"se",そ:"so",た:"ta",ち:"chi",つ:"tsu",て:"te",と:"to",な:"na",に:"ni",ぬ:"nu",ね:"ne",の:"no",は:"ha",ひ:"hi",ふ:"fu",へ:"he",ほ:"ho",ま:"ma",み:"mi",む:"mu",め:"me",も:"mo",や:"ya",ゆ:"yu",よ:"yo",ら:"ra",り:"ri",る:"ru",れ:"re",ろ:"ro",わ:"wa",を:"o",ん:"n",が:"ga",ぎ:"gi",ぐ:"gu",げ:"ge",ご:"go",ざ:"za",じ:"ji",ず:"zu",ぜ:"ze",ぞ:"zo",だ:"da",で:"de",ど:"do",ば:"ba",び:"bi",ぶ:"bu",べ:"be",ぼ:"bo",ぱ:"pa",ぴ:"pi",ぷ:"pu",ぺ:"pe",ぽ:"po",きゃ:"kya",きゅ:"kyu",きょ:"kyo",しゃ:"sha",しゅ:"shu",しょ:"sho",ちゃ:"cha",ちゅ:"chu",ちょ:"cho",りゃ:"rya",りゅ:"ryu",りょ:"ryo" };
 const O_kanaToRomaji = (kana) => { let r = "", i = 0; const s = (kana||"").replace(/\s/g, ""); while (i < s.length) { const two = s.slice(i, i + 2); if (O_KANA[two]) { r += O_KANA[two]; i += 2; continue; } const one = s[i]; if (one === "っ" && i + 1 < s.length) { const nx = O_KANA[s[i + 1]] || ""; r += nx[0] || ""; i++; continue; } r += O_KANA[one] || ""; i++; } return r; };
@@ -564,9 +565,16 @@ export default function ForgePage() {
     const romaji = O_kanaToRomaji(oYomi); const dp = O_dayPillar(y, m, d);
     const calc = { 数秘術: { ライフパス: O_lifePath(y, m, d), 運命数: romaji ? O_destinyNum(romaji) : null }, 西洋占星術: { 太陽星座: O_sunSign(m, d) }, 九星気学: { 本命星: O_nineStar(y, m, d) }, 四柱推命: { 年柱: O_yearPillar(y), 日柱: dp, 日主: O_STEM_EL[dp[0]] + "（" + dp[0] + "）" }, 姓名判断: O_seimei(oSeiStrokes, oMeiStrokes) };
     const prompt = `あなたは複数の占術を統合する熟練の鑑定士です。以下は既に正確に計算済みのデータです。再計算せず解釈・統合してください。
-【対象】${oSei}${oMei}（${oYomi}）${oAlt ? "／通称: " + oAlt : ""}　${y}年${m}月${d}日生
+【対象】${oSei}${oMei}（${oYomi}）${oAlt ? "／通称: " + oAlt : ""}　${y}年${m}月${d}日生（現在${O_age(y,m,d)}歳・誕生日${m}月${d}日）
 【計算済データ】${JSON.stringify(calc)}
-【表現の指針】抽象的で誰にでも当たる表現（バーナム効果）を禁止。行動・場面・具体例まで落とす。職業は実在の職種名を複数。環境は状況で描く（評価軸・スピード感・人間関係・裁量）。時期は年代で。ただし予言的・過剰具体化はしない。予言でなく自己理解の鏡として、生年月日由来と名前由来という独立した源の一致点を信頼度の高い収束として扱う。
+【表現の指針 — 最重要】
+・バーナム効果（誰にでも当てはまる無難な表現）を厳禁。これがあると価値ゼロ。
+  悪い例（禁止）:「思慮深く内に情熱を秘めている」「人との調和を大切にする」「慎重だが行動力もある」
+  良い例:「初対面は聞き役、3回目以降に本音を出す」「決断前に必ず数字を並べ、揃わないと動けない」「頼まれると断れず巻き取り、自分の時間を失う」
+・それぞれの主張に、どの占術の何（例:日主乙木／本命星◯／地格◯画）から導いたか根拠を一言添える。
+・断定を恐れない。外れる可能性のある具体的な主張をする。無難な一般論は最も価値が低い。
+・職業は実在の職種名を複数。環境は状況で描く（評価軸・スピード感・人間関係・裁量）。時期は年代で。予言的な過剰具体化（特定の年の特定の出来事）はしない。
+・予言でなく自己理解の鏡として、生年月日由来と名前由来という独立した源の一致点を信頼度の高い収束として扱う。
 以下のJSON【のみ】で返答（マークダウン・前置き不要）：
 {"headline":"一言で(20字前後・具体)","essence":["核の特徴3つ各15字前後"],"careers":["向く職業6つ具体"],"environment_thrive":"活きる環境2文具体","environment_avoid":"枯れる環境2文具体","strengths":[{"title":"強み8字以内","detail":"行動レベル1-2文"}],"cautions":[{"title":"注意点8字以内","detail":"行動レベル1-2文"}],"timing":"運の流れと伸びる年代2文","convergence":[{"theme":"収束した型","detail":"2文","sources":["占術名"]}],"divergence":[{"theme":"分かれる点","detail":"2文"}],"business":"ビジネス示唆3-4文具体","systems":[{"name":"占術名","reading":"要点2文"}]}
 strengths/cautionsは各3つ。`;
@@ -600,33 +608,43 @@ strengths/cautionsは各3つ。`;
 
   // 中長期レビュー
   const oReviews = data.oracle?.reviews || [];
-  const oGatherReflections = (limit) => {
+  // 期間全体から満遍なくサンプリング（最新偏重を避ける）
+  const oSampleAcross = (arr, n) => { if (arr.length <= n) return arr; const step = (arr.length - 1) / (n - 1); const out = []; for (let i = 0; i < n; i++) out.push(arr[Math.round(i * step)]); return [...new Set(out)]; };
+  const oGatherReflections = (horizon) => {
     const dl = data.forge?.dailyLog || {};
-    const dates = Object.keys(dl).sort().reverse().slice(0, limit);
-    const parts = dates.map(dt => { const e = dl[dt]; const bits = []; if (e.journal) bits.push("振返:" + e.journal); if (e.gratitude) bits.push("感謝:" + e.gratitude); if (e.visionCheck) bits.push("確認:" + e.visionCheck); if (e.top3) bits.push("Top3:" + e.top3.map(t => t.text + "(" + (t.status||"") + ")").join("/")); return bits.length ? dt + " " + bits.join(" ") : null; }).filter(Boolean);
-    const oLogTxt = (data.oracle?.logs || []).slice(0, limit).map(l => l.date + " " + l.reflection).filter(Boolean);
-    return { daily: parts, oracleDaily: oLogTxt };
+    const days = { "1ヶ月": 30, "3ヶ月": 90, "半年": 180, "1年": 365, "3年": 1095, "10年+": 36500 }[horizon] || 90;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const allDates = Object.keys(dl).filter(dt => dt >= cutoffStr).sort(); // 古い順
+    const total = allDates.length;
+    const sampled = oSampleAcross(allDates, 45); // 期間全体から最大45件を均等抽出
+    const parts = sampled.map(dt => { const e = dl[dt]; const bits = []; if (e.journal) bits.push("振:" + e.journal); if (e.gratitude) bits.push("感謝:" + e.gratitude); if (e.visionCheck) bits.push("確認:" + e.visionCheck); if (e.top3) bits.push("Top3:" + e.top3.map(t => t.text + "(" + (t.status||"") + ")").join("/")); return bits.length ? dt + " " + bits.join(" ") : null; }).filter(Boolean);
+    const ol = (data.oracle?.logs || []).filter(l => l.date >= cutoffStr).sort((a, b) => a.date.localeCompare(b.date));
+    const oracleDaily = oSampleAcross(ol, 15).map(l => l.date + " " + l.reflection);
+    return { parts, total, oracleDaily, olTotal: ol.length };
   };
   const oGenerateReview = async () => {
     if (!oracleBase) return;
     setOErr(""); setOLoading(true);
-    const limitMap = { "1ヶ月": 31, "3ヶ月": 60, "半年": 90, "1年": 120, "3年": 150, "10年+": 150 };
-    const g = oGatherReflections(limitMap[oHorizon] || 60);
+    const g = oGatherReflections(oHorizon);
     const longHorizon = ["1年", "3年", "10年+"].includes(oHorizon);
+    const ageStr = oracleBase.meta ? `この人は現在${O_age(oracleBase.meta.y, oracleBase.meta.m, oracleBase.meta.d)}歳（${oracleBase.meta.y}年${oracleBase.meta.m}月${oracleBase.meta.d}日生）。年齢は正確なので推測しないこと。` : "";
     const prompt = `あなたは複数の占術を統合する熟練の鑑定士です。この人の「中長期レビュー（${oHorizon}）」を書いてください。
+${ageStr}
 
 【命式（固定の型）】${oracleBase.headline}／要点:${(oracleBase.essence||[]).join("・")}／収束:${(oracleBase.convergence||[]).map(c=>c.theme).join("、")}／運の流れ:${oracleBase.timing}
-【最近の振り返り記録】${g.daily.slice(0, 30).join(" ｜ ") || "（記録少なめ）"}
-【最近の型解釈ログ】${g.oracleDaily.slice(0, 15).join(" ｜ ") || "（なし）"}
+【記録の範囲】この${oHorizon}でFORGEに${g.total}日分の振り返りが蓄積。直近偏重を避けるため、期間全体から時系列順に代表${g.parts.length}件を均等抽出（古い順）:
+${g.parts.join(" ｜ ") || "（記録少なめ）"}
+【型解釈ログ ${g.olTotal}件から抜粋】${g.oracleDaily.join(" ｜ ") || "（なし）"}
 
-【書き方】
-- 時間軸は「${oHorizon}」。${longHorizon ? "長期なので命式（生まれ持った大きな流れ・運の周期）を主役にし、日々の記録は補助的に使う。" : "短中期なので最近の行動記録を主役にし、命式はレンズとして使う。"}
-- 予言ではなく「この期間、あなたの型から見るとこういう流れにある。だからこう構えると流れに乗れる」という解釈。
-- 「〜すべき」でなく流れに乗る言い方。具体的に。300字程度。
+【書き方 — 重要】
+- 直近の数日に引っ張られず、上の記録全体を見て、この期間に【繰り返し現れるテーマ】【時間とともに変化したこと】【始めたが続かなかったこと】を総合的に拾うこと。
+- 時間軸は「${oHorizon}」。${longHorizon ? "長期なので命式（生まれ持った大きな流れ・運の周期）を主役に、記録は傾向の裏付けに使う。" : "短中期なので記録の流れを主役に、命式をレンズに使う。"}
+- 予言ではなく「この期間、あなたの型から見るとこういう流れにある。だからこう構えると流れに乗れる」という解釈。具体的に。「〜すべき」でなく流れに乗る言い方で。350字程度。
 - 最後に、この期間の小さな指針を1つ。
 プレーンテキストのみ。`;
     try {
-      const text = await oCallAPI(prompt, 1200);
+      const text = await oCallAPI(prompt, 1400);
       const nr = [{ horizon: oHorizon, date: todayStr(), text: text.trim(), ts: Date.now() }, ...oReviews];
       patchOracle({ reviews: nr });
     } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
@@ -663,7 +681,7 @@ strengths/cautionsは各3つ。`;
     const hasFace = !!oFaceImg; const hasHand = !!(oHandL || oHandR);
     const prompt = `あなたは観相学（顔相・手相）の熟練鑑定士です。添付画像を読み解いてください。
 画像は順に【${labels.join("→")}】です。
-${oracleBase ? `この人の命式（参考）：${oracleBase.headline}／${(oracleBase.essence||[]).join("・")}` : ""}
+${oracleBase ? `この人の命式（参考）：${oracleBase.headline}／${(oracleBase.essence||[]).join("・")}${oracleBase.meta ? `／現在${O_age(oracleBase.meta.y, oracleBase.meta.m, oracleBase.meta.d)}歳` : ""}` : ""}
 ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回からの変化があれば必ず指摘してください（観相学では相は心の状態を映し、変化します）。` : ""}
 
 【書き方】
@@ -704,15 +722,15 @@ ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回�
 
     {oracleView === "setup" && (<div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-        <div><div style={oLab}>姓（漢字）</div><input style={{ ...inputBase, width: "100%" }} value={oSei} onChange={e => { setOSei(e.target.value); setOConfirmed(false); }} placeholder="舛野" /></div>
-        <div><div style={oLab}>名（漢字）</div><input style={{ ...inputBase, width: "100%" }} value={oMei} onChange={e => { setOMei(e.target.value); setOConfirmed(false); }} placeholder="充" /></div>
+        <div><div style={oLab}>姓（漢字）</div><input style={{ ...inputBase, width: "100%" }} value={oSei} onChange={e => { setOSei(e.target.value); setOConfirmed(false); }} placeholder="山田" /></div>
+        <div><div style={oLab}>名（漢字）</div><input style={{ ...inputBase, width: "100%" }} value={oMei} onChange={e => { setOMei(e.target.value); setOConfirmed(false); }} placeholder="太郎" /></div>
       </div>
-      <div style={{ marginBottom: 12 }}><div style={oLab}>よみがな</div><input style={{ ...inputBase, width: "100%" }} value={oYomi} onChange={e => setOYomi(e.target.value)} placeholder="ますの みつる" /></div>
+      <div style={{ marginBottom: 12 }}><div style={oLab}>よみがな</div><input style={{ ...inputBase, width: "100%" }} value={oYomi} onChange={e => setOYomi(e.target.value)} placeholder="やまだ たろう" /></div>
       <div style={{ marginBottom: 12 }}><div style={oLab}>通称・ビジネスネーム（任意）</div><input style={{ ...inputBase, width: "100%" }} value={oAlt} onChange={e => setOAlt(e.target.value)} placeholder="任意" /></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
-        <div><div style={oLab}>生年</div><input style={{ ...inputBase, width: "100%" }} value={oBy} onChange={e => setOBy(e.target.value)} placeholder="1988" /></div>
-        <div><div style={oLab}>月</div><input style={{ ...inputBase, width: "100%" }} value={oBm} onChange={e => setOBm(e.target.value)} placeholder="8" /></div>
-        <div><div style={oLab}>日</div><input style={{ ...inputBase, width: "100%" }} value={oBd} onChange={e => setOBd(e.target.value)} placeholder="10" /></div>
+        <div><div style={oLab}>生年</div><input style={{ ...inputBase, width: "100%" }} value={oBy} onChange={e => setOBy(e.target.value)} placeholder="1990" /></div>
+        <div><div style={oLab}>月</div><input style={{ ...inputBase, width: "100%" }} value={oBm} onChange={e => setOBm(e.target.value)} placeholder="5" /></div>
+        <div><div style={oLab}>日</div><input style={{ ...inputBase, width: "100%" }} value={oBd} onChange={e => setOBd(e.target.value)} placeholder="15" /></div>
       </div>
       {oAllChars.length > 0 && (<div style={{ background: T.surface, border: "1px solid "+(oConfirmed?T.green:T.morning), borderRadius: 8, padding: "16px", marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: T.morning, marginBottom: 4 }}>⚠ 画数の確認（唯一、人の確認が必要な項目）</div>
