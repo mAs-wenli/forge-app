@@ -24,6 +24,28 @@ const todayStr = () => toDateStr(new Date());
 const timeNow = () => { const d = new Date(); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
 const dayLabel = (ds) => { const d = new Date(ds + "T00:00:00"); return (d.getMonth()+1) + "/" + d.getDate() + " (" + ["日","月","火","水","木","金","土"][d.getDay()] + ")"; };
 
+// ═══════ ORACLE: 決定論計算（検証済） ═══════
+const O_reduceNum = (n, k = true) => { while (n > 9 && !(k && (n === 11 || n === 22 || n === 33))) n = String(n).split("").reduce((a, b) => a + Number(b), 0); return n; };
+const O_reduceSingle = (n) => { while (n > 9) n = String(n).split("").reduce((a, b) => a + Number(b), 0); return n; };
+const O_lifePath = (y, m, d) => O_reduceNum(`${y}${m}${d}`.split("").reduce((a, b) => a + Number(b), 0));
+const O_PYTH = { a:1,b:2,c:3,d:4,e:5,f:6,g:7,h:8,i:9,j:1,k:2,l:3,m:4,n:5,o:6,p:7,q:8,r:9,s:1,t:2,u:3,v:4,w:5,x:6,y:7,z:8 };
+const O_destinyNum = (r) => { const s = r.toLowerCase().replace(/[^a-z]/g, "").split("").reduce((a, c) => a + (O_PYTH[c] || 0), 0); return s ? O_reduceNum(s) : null; };
+const O_ZODIAC = { 1:[19,"山羊座","水瓶座"],2:[18,"水瓶座","魚座"],3:[20,"魚座","牡羊座"],4:[19,"牡羊座","牡牛座"],5:[20,"牡牛座","双子座"],6:[21,"双子座","蟹座"],7:[22,"蟹座","獅子座"],8:[22,"獅子座","乙女座"],9:[22,"乙女座","天秤座"],10:[23,"天秤座","蠍座"],11:[22,"蠍座","射手座"],12:[21,"射手座","山羊座"] };
+const O_sunSign = (m, d) => { const [c, a, b] = O_ZODIAC[m]; return d <= c ? a : b; };
+const O_NINE = { 1:"一白水星",2:"二黒土星",3:"三碧木星",4:"四緑木星",5:"五黄土星",6:"六白金星",7:"七赤金星",8:"八白土星",9:"九紫火星" };
+const O_nineStar = (y, m, d) => { let yr = y; if (m === 1 || (m === 2 && d <= 3)) yr -= 1; let st = 11 - O_reduceSingle(yr); if (st > 9) st -= 9; if (st < 1) st += 9; return O_NINE[st]; };
+const O_STEMS = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];
+const O_BRANCHES = ["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"];
+const O_STEM_EL = { 甲:"陽木",乙:"陰木",丙:"陽火",丁:"陰火",戊:"陽土",己:"陰土",庚:"陽金",辛:"陰金",壬:"陽水",癸:"陰水" };
+const O_yearPillar = (y) => O_STEMS[((y - 4) % 10 + 10) % 10] + O_BRANCHES[((y - 4) % 12 + 12) % 12];
+const O_jdn = (y, m, d) => { const a = Math.floor((14 - m) / 12), yy = y + 4800 - a, mm = m + 12 * a - 3; return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045; };
+const O_dayPillar = (y, m, d) => { const i = ((O_jdn(y, m, d) % 60) + 47) % 60; return O_STEMS[i % 10] + O_BRANCHES[i % 12]; };
+const O_seimei = (sei, mei) => { if (!sei.length || !mei.length) return null; const tenkaku = sei.reduce((a, b) => a + b, 0), chikaku = mei.reduce((a, b) => a + b, 0), jinkaku = sei[sei.length - 1] + mei[0], soukaku = tenkaku + chikaku; return { tenkaku, jinkaku, chikaku, gaikaku: soukaku - jinkaku, soukaku }; };
+const O_STROKES = { 舛:6,野:11,充:6,田:5,中:4,山:3,川:3,木:4,本:5,林:8,森:12,村:7,松:8,井:4,小:3,大:3,太:4,子:3,一:1,二:2,三:3,正:5,平:5,光:6,明:8,和:8,健:11,翔:12,陽:12,真:10,優:17,花:7,香:9,愛:13,結:12,口:3,上:3,下:3 };
+const O_KANA = { あ:"a",い:"i",う:"u",え:"e",お:"o",か:"ka",き:"ki",く:"ku",け:"ke",こ:"ko",さ:"sa",し:"shi",す:"su",せ:"se",そ:"so",た:"ta",ち:"chi",つ:"tsu",て:"te",と:"to",な:"na",に:"ni",ぬ:"nu",ね:"ne",の:"no",は:"ha",ひ:"hi",ふ:"fu",へ:"he",ほ:"ho",ま:"ma",み:"mi",む:"mu",め:"me",も:"mo",や:"ya",ゆ:"yu",よ:"yo",ら:"ra",り:"ri",る:"ru",れ:"re",ろ:"ro",わ:"wa",を:"o",ん:"n",が:"ga",ぎ:"gi",ぐ:"gu",げ:"ge",ご:"go",ざ:"za",じ:"ji",ず:"zu",ぜ:"ze",ぞ:"zo",だ:"da",で:"de",ど:"do",ば:"ba",び:"bi",ぶ:"bu",べ:"be",ぼ:"bo",ぱ:"pa",ぴ:"pi",ぷ:"pu",ぺ:"pe",ぽ:"po",きゃ:"kya",きゅ:"kyu",きょ:"kyo",しゃ:"sha",しゅ:"shu",しょ:"sho",ちゃ:"cha",ちゅ:"chu",ちょ:"cho",りゃ:"rya",りゅ:"ryu",りょ:"ryo" };
+const O_kanaToRomaji = (kana) => { let r = "", i = 0; const s = (kana||"").replace(/\s/g, ""); while (i < s.length) { const two = s.slice(i, i + 2); if (O_KANA[two]) { r += O_KANA[two]; i += 2; continue; } const one = s[i]; if (one === "っ" && i + 1 < s.length) { const nx = O_KANA[s[i + 1]] || ""; r += nx[0] || ""; i++; continue; } r += O_KANA[one] || ""; i++; } return r; };
+const O_stripJSON = (t) => { const m = t.match(/\{[\s\S]*\}/); return m ? m[0] : t.replace(/```json|```/g, "").trim(); };
+
 export default function ForgePage() {
   const { data, setData, loading, saveStatus, logout } = useForgeData();
   const [section, setSection] = useState("today");
@@ -43,6 +65,17 @@ export default function ForgePage() {
   const [visionCheckDraft, setVisionCheckDraft] = useState("");
   const [historyDate, setHistoryDate] = useState(null);
   const [historyMonth, setHistoryMonth] = useState(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); });
+  // ORACLE state
+  const [oracleView, setOracleView] = useState("base");
+  const [oLoading, setOLoading] = useState(false);
+  const [oErr, setOErr] = useState("");
+  const [oShowDetail, setOShowDetail] = useState(false);
+  const [oSei, setOSei] = useState(""); const [oMei, setOMei] = useState("");
+  const [oYomi, setOYomi] = useState(""); const [oAlt, setOAlt] = useState("");
+  const [oBy, setOBy] = useState(""); const [oBm, setOBm] = useState(""); const [oBd, setOBd] = useState("");
+  const [oStrokes, setOStrokes] = useState({});
+  const [oConfirmed, setOConfirmed] = useState(false);
+  const [oReflect, setOReflect] = useState("");
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [editingDomainHeader, setEditingDomainHeader] = useState(null);
   const [domainHeaderDraft, setDomainHeaderDraft] = useState({ name: "", emoji: "" });
@@ -180,7 +213,7 @@ export default function ForgePage() {
 
   if (loading || !data) return (<div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ color: T.textMuted, fontSize: 14 }}>Loading...</div></div>);
 
-  const NAV = [{ id: "today", icon: "◉", label: "Today" }, { id: "foundation", icon: "△", label: "Foundation" }, { id: "mirror", icon: "◇", label: "Mirror" }, { id: "history", icon: "◫", label: "History" }];
+  const NAV = [{ id: "today", icon: "◉", label: "Today" }, { id: "foundation", icon: "△", label: "Foundation" }, { id: "mirror", icon: "◇", label: "Mirror" }, { id: "oracle", icon: "✷", label: "Oracle" }, { id: "history", icon: "◫", label: "History" }];
   const tagColors = { pure: T.teal, fear: T.coral, unknown: T.textDim };
   const tagLabels = { pure: "純粋", fear: "恐怖", unknown: "不明" };
   const statusIcons = { done: "○", partial: "△", undone: "×" }; const statusColors = { done: T.green, partial: T.morning, undone: T.red };
@@ -490,10 +523,150 @@ export default function ForgePage() {
   };
 
   // ═══════ LAYOUT ═══════
+  // ═══════ ORACLE handlers + view ═══════
+  const oracleBase = data.oracle?.base || null;
+  const oracleLogs = data.oracle?.logs || [];
+  useEffect(() => {
+    const ip = data.oracle?.input;
+    if (ip && !oSei && !oMei) { setOSei(ip.sei||""); setOMei(ip.mei||""); setOYomi(ip.yomi||""); setOAlt(ip.alt||""); setOBy(ip.by||""); setOBm(ip.bm||""); setOBd(ip.bd||""); setOStrokes(ip.strokes||{}); }
+    setOracleView(data.oracle?.base ? "base" : "setup");
+  }, [data.oracle]); // eslint-disable-line
+
+  const oSeiChars = oSei.split(""); const oMeiChars = oMei.split("");
+  const oAllChars = [...oSeiChars, ...oMeiChars];
+  const oStrokeOf = (ch) => oStrokes[ch] !== undefined ? oStrokes[ch] : (O_STROKES[ch] ?? "");
+  const oSeiStrokes = oSeiChars.map(oStrokeOf), oMeiStrokes = oMeiChars.map(oStrokeOf);
+  const oAllValid = oAllChars.length > 0 && [...oSeiStrokes, ...oMeiStrokes].every((s) => typeof s === "number" && s > 0);
+  const oPreview = oAllValid ? O_seimei(oSeiStrokes, oMeiStrokes) : null;
+
+  const oCallAPI = async (prompt, maxTokens) => { const res = await fetch("/api/oracle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, maxTokens }) }); const j = await res.json(); if (j.error) throw new Error(j.error); return j.text || ""; };
+  const saveOracle = (base, logs, input) => setData(d => ({ ...d, oracle: { base, logs, input } }));
+
+  const oGenerateBase = async () => {
+    setOErr("");
+    if (!oSei || !oMei || !oBy || !oBm || !oBd) { setOErr("姓・名・生年月日は必須です"); return; }
+    if (!oAllValid) { setOErr("すべての文字の画数を入力してください"); return; }
+    if (!oConfirmed) { setOErr("画数の確認チェックを入れてください"); return; }
+    const y = +oBy, m = +oBm, d = +oBd;
+    const romaji = O_kanaToRomaji(oYomi); const dp = O_dayPillar(y, m, d);
+    const calc = { 数秘術: { ライフパス: O_lifePath(y, m, d), 運命数: romaji ? O_destinyNum(romaji) : null }, 西洋占星術: { 太陽星座: O_sunSign(m, d) }, 九星気学: { 本命星: O_nineStar(y, m, d) }, 四柱推命: { 年柱: O_yearPillar(y), 日柱: dp, 日主: O_STEM_EL[dp[0]] + "（" + dp[0] + "）" }, 姓名判断: O_seimei(oSeiStrokes, oMeiStrokes) };
+    const prompt = `あなたは複数の占術を統合する熟練の鑑定士です。以下は既に正確に計算済みのデータです。再計算せず解釈・統合してください。
+【対象】${oSei}${oMei}（${oYomi}）${oAlt ? "／通称: " + oAlt : ""}　${y}年${m}月${d}日生
+【計算済データ】${JSON.stringify(calc)}
+【表現の指針】抽象的で誰にでも当たる表現（バーナム効果）を禁止。行動・場面・具体例まで落とす。職業は実在の職種名を複数。環境は状況で描く（評価軸・スピード感・人間関係・裁量）。時期は年代で。ただし予言的・過剰具体化はしない。予言でなく自己理解の鏡として、生年月日由来と名前由来という独立した源の一致点を信頼度の高い収束として扱う。
+以下のJSON【のみ】で返答（マークダウン・前置き不要）：
+{"headline":"一言で(20字前後・具体)","essence":["核の特徴3つ各15字前後"],"careers":["向く職業6つ具体"],"environment_thrive":"活きる環境2文具体","environment_avoid":"枯れる環境2文具体","strengths":[{"title":"強み8字以内","detail":"行動レベル1-2文"}],"cautions":[{"title":"注意点8字以内","detail":"行動レベル1-2文"}],"timing":"運の流れと伸びる年代2文","convergence":[{"theme":"収束した型","detail":"2文","sources":["占術名"]}],"divergence":[{"theme":"分かれる点","detail":"2文"}],"business":"ビジネス示唆3-4文具体","systems":[{"name":"占術名","reading":"要点2文"}]}
+strengths/cautionsは各3つ。`;
+    setOLoading(true);
+    try {
+      const raw = await oCallAPI(prompt, 3500);
+      const parsed = JSON.parse(O_stripJSON(raw));
+      const nb = { ...parsed, calc, meta: { sei: oSei, mei: oMei, yomi: oYomi, y, m, d } };
+      setOShowDetail(false); setOracleView("base");
+      saveOracle(nb, oracleLogs, { sei: oSei, mei: oMei, yomi: oYomi, alt: oAlt, by: oBy, bm: oBm, bd: oBd, strokes: oStrokes });
+    } catch (e) { setOErr("生成に失敗しました。もう一度。(" + e.message + ")"); }
+    setOLoading(false);
+  };
+
+  const oGenerateDaily = async (reflectText) => {
+    const txt = (reflectText || oReflect).trim();
+    if (!txt || !oracleBase) return;
+    setOErr(""); setOLoading(true);
+    const conv = (oracleBase.convergence || []).map((c) => c.theme).join("、");
+    const prompt = `この人の固定の型：${oracleBase.headline}。要点：${(oracleBase.essence||[]).join("／")}。収束：${conv}。
+【今日の振り返り】${txt}
+この人の「型」というレンズで今日を読み解いてください。運勢予報ではなく「あなたの型から見ると今日のこれはこう」という解釈。「〜すべき」でなく流れに乗る言い方で。150〜200字、温かく、具体的な小さな次の一歩を一つ。プレーンテキストのみ。`;
+    try {
+      const text = await oCallAPI(prompt, 800);
+      const nl = [{ date: todayStr(), reflection: txt, reading: text.trim(), ts: Date.now() }, ...oracleLogs];
+      setOReflect("");
+      saveOracle(oracleBase, nl, data.oracle?.input || { sei: oSei, mei: oMei, yomi: oYomi, alt: oAlt, by: oBy, bm: oBm, bd: oBd, strokes: oStrokes });
+    } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
+    setOLoading(false);
+  };
+
+  const oChip = { fontSize: 13, padding: "6px 12px", borderRadius: 6, background: T.surfaceAlt, border: "1px solid " + T.border, color: T.text };
+  const oLab = { fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: "var(--fm)" };
+  const oSec = (c, t) => <div style={{ fontSize: 12, color: c, margin: "20px 0 8px", letterSpacing: "0.04em", fontFamily: "var(--fm)" }}>{t}</div>;
+
+  const OracleView = () => (<div>
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
+      <div><h1 style={{ fontSize: 24, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Oracle</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>複数の占術を三角測量する自己理解の鏡</div></div>
+      {oracleBase && <div style={{ display: "flex", gap: 6 }}>{[["base","結果"],["daily","型から見た今日"],["setup","再設定"]].map(([id,lb]) => <button key={id} onClick={() => setOracleView(id)} style={{ ...btnSm, border: "1px solid "+(oracleView===id?T.accent:T.border), color: oracleView===id?T.accent:T.textMuted, borderRadius: 8, padding: "5px 10px" }}>{lb}</button>)}</div>}
+    </div>
+    {oErr && <div style={{ background: T.surface, border: "1px solid "+T.red, borderRadius: 8, padding: "12px 14px", color: T.red, fontSize: 13, marginBottom: 12 }}>{oErr}</div>}
+
+    {oracleView === "setup" && (<div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <div><div style={oLab}>姓（漢字）</div><input style={{ ...inputBase, width: "100%" }} value={oSei} onChange={e => { setOSei(e.target.value); setOConfirmed(false); }} placeholder="舛野" /></div>
+        <div><div style={oLab}>名（漢字）</div><input style={{ ...inputBase, width: "100%" }} value={oMei} onChange={e => { setOMei(e.target.value); setOConfirmed(false); }} placeholder="充" /></div>
+      </div>
+      <div style={{ marginBottom: 12 }}><div style={oLab}>よみがな</div><input style={{ ...inputBase, width: "100%" }} value={oYomi} onChange={e => setOYomi(e.target.value)} placeholder="ますの みつる" /></div>
+      <div style={{ marginBottom: 12 }}><div style={oLab}>通称・ビジネスネーム（任意）</div><input style={{ ...inputBase, width: "100%" }} value={oAlt} onChange={e => setOAlt(e.target.value)} placeholder="任意" /></div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <div><div style={oLab}>生年</div><input style={{ ...inputBase, width: "100%" }} value={oBy} onChange={e => setOBy(e.target.value)} placeholder="1988" /></div>
+        <div><div style={oLab}>月</div><input style={{ ...inputBase, width: "100%" }} value={oBm} onChange={e => setOBm(e.target.value)} placeholder="8" /></div>
+        <div><div style={oLab}>日</div><input style={{ ...inputBase, width: "100%" }} value={oBd} onChange={e => setOBd(e.target.value)} placeholder="10" /></div>
+      </div>
+      {oAllChars.length > 0 && (<div style={{ background: T.surface, border: "1px solid "+(oConfirmed?T.green:T.morning), borderRadius: 8, padding: "16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: T.morning, marginBottom: 4 }}>⚠ 画数の確認（唯一、人の確認が必要な項目）</div>
+        <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.7, marginBottom: 12 }}>姓名判断は<b style={{ color: T.textMuted }}>康熙字典の画数</b>を使います。部首は特殊カウント（さんずい氵=4／くさかんむり艹=6／しんにょう辶=7／てへん扌=4）。下の値を必ず確認してください。</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>{oAllChars.map((ch, i) => { const known = O_STROKES[ch] !== undefined || oStrokes[ch] !== undefined; return (<div key={i} style={{ textAlign: "center" }}><div style={{ fontSize: 20, marginBottom: 4 }}>{ch}</div><input style={{ ...inputBase, width: 54, textAlign: "center", borderColor: known?T.border:T.morning }} value={oStrokeOf(ch)} onChange={e => { setOStrokes(p => ({ ...p, [ch]: e.target.value === "" ? "" : Math.max(0, +e.target.value) })); setOConfirmed(false); }} placeholder="?" /><div style={{ fontSize: 9, color: known?T.textDim:T.morning, marginTop: 2 }}>{known?"参考値":"要入力"}</div></div>); })}</div>
+        {oPreview && <div style={{ background: T.bg, borderRadius: 6, padding: "10px 12px", fontSize: 12, color: T.textMuted, marginBottom: 12, fontFamily: "var(--fm)" }}>五格： 天<b style={{ color: T.text }}>{oPreview.tenkaku}</b>・人<b style={{ color: T.text }}>{oPreview.jinkaku}</b>・地<b style={{ color: T.text }}>{oPreview.chikaku}</b>・外<b style={{ color: T.text }}>{oPreview.gaikaku}</b>・総<b style={{ color: T.text }}>{oPreview.soukaku}</b></div>}
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: oConfirmed?T.green:T.textMuted }}><input type="checkbox" checked={oConfirmed} onChange={e => setOConfirmed(e.target.checked)} disabled={!oAllValid} style={{ width: 16, height: 16, accentColor: T.green }} />この画数で確定して占う（確認しました）</label>
+      </div>)}
+      <button onClick={oGenerateBase} disabled={oLoading || !oConfirmed} style={{ ...btnPrimary, width: "100%", padding: "11px", opacity: (oLoading||!oConfirmed)?0.5:1 }}>{oLoading ? "統合中…（数秒）" : "占う"}</button>
+      <div style={{ fontSize: 11, color: T.textDim, marginTop: 10, lineHeight: 1.7 }}>※ 数秘・星座・九星・干支は端末側で正確に計算（検証済）。AIは解釈と収束/発散の抽出のみ。画数だけ康熙慣習のため確認を必須にしています。</div>
+    </div>)}
+
+    {oracleView === "base" && oracleBase && (<div>
+      <div style={{ background: T.surface, border: "1px solid "+T.accent, borderRadius: 8, padding: "18px" }}>
+        <div style={{ fontSize: 10, color: T.accent, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8, fontFamily: "var(--fm)" }}>あなたを一言で</div>
+        <div style={{ fontSize: 17, lineHeight: 1.6, fontWeight: 500, marginBottom: 14 }}>{oracleBase.headline}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{(oracleBase.essence||[]).map((e,i) => <div key={i} style={{ fontSize: 14, color: T.textMuted, paddingLeft: 14, borderLeft: "2px solid "+T.accent, lineHeight: 1.6 }}>{e}</div>)}</div>
+      </div>
+      {oSec(T.teal, "◆ 向いている職業・役割")}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{(oracleBase.careers||[]).map((c,i) => <span key={i} style={oChip}>{c}</span>)}</div>
+      {oSec(T.green, "◆ いるべき環境")}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ background: T.surface, borderLeft: "2px solid "+T.green, borderRadius: "0 8px 8px 0", padding: "14px 16px" }}><div style={{ fontSize: 11, color: T.green, marginBottom: 6 }}>活きる環境</div><div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>{oracleBase.environment_thrive}</div></div>
+        <div style={{ background: T.surface, borderLeft: "2px solid "+T.red, borderRadius: "0 8px 8px 0", padding: "14px 16px" }}><div style={{ fontSize: 11, color: T.red, marginBottom: 6 }}>枯れる環境</div><div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>{oracleBase.environment_avoid}</div></div>
+      </div>
+      {oSec(T.text, "◆ 強み")}
+      {(oracleBase.strengths||[]).map((s,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "12px 16px", marginBottom: 8 }}><span style={{ fontSize: 13, fontWeight: 600, color: T.teal }}>{s.title}</span><span style={{ fontSize: 13, color: T.textMuted, marginLeft: 10, lineHeight: 1.6 }}>{s.detail}</span></div>)}
+      {oSec(T.text, "◆ 注意点")}
+      {(oracleBase.cautions||[]).map((s,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "12px 16px", marginBottom: 8 }}><span style={{ fontSize: 13, fontWeight: 600, color: T.morning }}>{s.title}</span><span style={{ fontSize: 13, color: T.textMuted, marginLeft: 10, lineHeight: 1.6 }}>{s.detail}</span></div>)}
+      {oSec(T.evening, "◆ 運の流れ・伸びる時期")}
+      <div style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", fontSize: 13, color: T.textMuted, lineHeight: 1.8 }}>{oracleBase.timing}</div>
+      <button onClick={() => setOShowDetail(!oShowDetail)} style={{ ...btnSm, border: "1px solid "+T.border, color: T.textMuted, borderRadius: 8, width: "100%", padding: "11px", marginTop: 18 }}>{oShowDetail ? "詳細を閉じる ▲" : "もっと詳しく見る（収束・発散・占術別・計算値）▼"}</button>
+      {oShowDetail && (<div>
+        {oSec(T.teal, "◆ 収束 — 独立した占術が一致する点（強い信号）")}
+        {(oracleBase.convergence||[]).map((c,i) => <div key={i} style={{ background: T.surface, borderLeft: "2px solid "+T.teal, borderRadius: "0 8px 8px 0", padding: "14px 16px", marginBottom: 8 }}><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>{c.theme}</div><div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7, marginBottom: 6 }}>{c.detail}</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{(c.sources||[]).map((s,j) => <span key={j} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: T.tealDim, color: T.teal }}>{s}</span>)}</div></div>)}
+        {oSec(T.morning, "◆ 発散 — 占術で分かれる点（選択の余地）")}
+        {(oracleBase.divergence||[]).map((c,i) => <div key={i} style={{ background: T.surface, borderLeft: "2px solid "+T.morning, borderRadius: "0 8px 8px 0", padding: "14px 16px", marginBottom: 8 }}><div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>{c.theme}</div><div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>{c.detail}</div></div>)}
+        {oSec(T.evening, "◆ ビジネス示唆")}
+        <div style={{ background: T.surface, borderLeft: "2px solid "+T.evening, borderRadius: "0 8px 8px 0", padding: "14px 16px", fontSize: 13, color: T.textMuted, lineHeight: 1.8 }}>{oracleBase.business}</div>
+        {oSec(T.textDim, "◆ 各占術の読み")}
+        {(oracleBase.systems||[]).map((s,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 8 }}><div style={{ fontSize: 13, fontWeight: 500, color: T.accent, marginBottom: 4 }}>{s.name}</div><div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>{s.reading}</div></div>)}
+        {oSec(T.textDim, "◆ 計算済みデータ（決定論）")}
+        <div style={{ background: T.surfaceAlt, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", fontSize: 12, color: T.textMuted, lineHeight: 1.9, fontFamily: "var(--fm)" }}>数秘LP <b style={{ color: T.text }}>{oracleBase.calc.数秘術.ライフパス}</b>{oracleBase.calc.数秘術.運命数!=null && <> ／ 運命数 <b style={{ color: T.text }}>{oracleBase.calc.数秘術.運命数}</b></>} ／ 星座 <b style={{ color: T.text }}>{oracleBase.calc.西洋占星術.太陽星座}</b> ／ 本命星 <b style={{ color: T.text }}>{oracleBase.calc.九星気学.本命星}</b><br/>年柱 <b style={{ color: T.text }}>{oracleBase.calc.四柱推命.年柱}</b> ／ 日柱 <b style={{ color: T.text }}>{oracleBase.calc.四柱推命.日柱}</b> ／ 日主 <b style={{ color: T.text }}>{oracleBase.calc.四柱推命.日主}</b>{oracleBase.calc.姓名判断 && <><br/>姓名判断 天{oracleBase.calc.姓名判断.tenkaku}・人{oracleBase.calc.姓名判断.jinkaku}・地{oracleBase.calc.姓名判断.chikaku}・外{oracleBase.calc.姓名判断.gaikaku}・総<b style={{ color: T.text }}>{oracleBase.calc.姓名判断.soukaku}</b></>}</div>
+      </div>)}
+    </div>)}
+
+    {oracleView === "daily" && oracleBase && (<div>
+      <div style={{ marginBottom: 10 }}><div style={oLab}>今日の振り返り</div><textarea style={{ ...inputBase, width: "100%", minHeight: 90, resize: "vertical" }} value={oReflect} onChange={e => setOReflect(e.target.value)} placeholder="今日あったこと・感じたこと…" /></div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => oGenerateDaily()} disabled={oLoading || !oReflect.trim()} style={{ ...btnPrimary, opacity: (oLoading||!oReflect.trim())?0.5:1 }}>{oLoading ? "読み解き中…" : "型から読み解く"}</button>
+        {getDailyLog().journal && <button onClick={() => oGenerateDaily(getDailyLog().journal)} disabled={oLoading} style={{ ...btnSm, border: "1px solid "+T.border, color: T.textMuted, borderRadius: 8, padding: "7px 12px", opacity: oLoading?0.5:1 }}>今夜のジャーナルを使う</button>}
+      </div>
+      <div style={{ marginTop: 22 }}>{oracleLogs.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだ記録がありません。</div>}{oracleLogs.map((l,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.textDim, marginBottom: 8, fontFamily: "var(--fm)" }}>{l.date}</div><div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, marginBottom: 10, paddingLeft: 10, borderLeft: "2px solid "+T.border }}>{l.reflection}</div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.8 }}>{l.reading}</div></div>)}</div>
+    </div>)}
+  </div>);
+
   const navItem = (n) => (<div key={n.id} onClick={() => setSection(n.id)} title={n.label} style={{ width: 38, height: 38, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: section === n.id ? T.accentDim : "transparent", color: section === n.id ? T.accent : T.textDim, fontSize: 14 }}><span>{n.icon}</span><span style={{ fontSize: 7, marginTop: 1 }}>{n.label}</span></div>);
   return (<div className="forge-shell">
     <nav className="forge-sidebar"><div style={{ fontSize: 18, marginBottom: 16, color: T.accent, fontWeight: 600, fontFamily: "var(--fc)" }}>F</div>{NAV.map(navItem)}<div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}><div style={{ fontSize: 7, color: saveStatus === "saved" ? T.green : saveStatus === "saving" ? T.morning : saveStatus === "error" ? T.red : "transparent", textAlign: "center", lineHeight: 1.2 }}>{saveStatus === "saved" ? "保存済✓" : saveStatus === "saving" ? "保存中" : saveStatus === "error" ? "失敗" : "　"}</div><button onClick={logout} title="ログアウト" style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 10, padding: 4 }}>↩</button></div></nav>
-    <main className="forge-main">{section === "today" && TodayView()}{section === "foundation" && FoundationView()}{section === "mirror" && MirrorView()}{section === "history" && HistoryView()}</main>
+    <main className="forge-main">{section === "today" && TodayView()}{section === "foundation" && FoundationView()}{section === "mirror" && MirrorView()}{section === "oracle" && OracleView()}{section === "history" && HistoryView()}</main>
     <nav className="forge-bottomnav">{NAV.map(n => (<div key={n.id} onClick={() => setSection(n.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px", cursor: "pointer", color: section === n.id ? T.accent : T.textDim }}><span style={{ fontSize: 18 }}>{n.icon}</span><span style={{ fontSize: 9 }}>{n.label}</span></div>))}</nav>
   </div>);
 }
