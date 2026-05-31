@@ -54,6 +54,7 @@ export function useForgeData() {
           if (!d.mirror) d.mirror = defaultMirror;
           if (!d.forge.dailyLog) d.forge.dailyLog = {};
           if (!d.forge.patternInterrupts) d.forge.patternInterrupts = defaultForge.patternInterrupts;
+          if (!d.oracle) d.oracle = null; // ORACLE: 追加フィールド（既存データは不変）
           // Migrate: create domains array if missing
           if (!d.forge.domains) {
             d.forge.domains = [];
