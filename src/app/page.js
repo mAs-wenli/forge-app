@@ -78,7 +78,8 @@ export default function ForgePage() {
   const [oReflect, setOReflect] = useState("");
   const [oHorizon, setOHorizon] = useState("1ヶ月");
   const [oFaceImg, setOFaceImg] = useState(null); // {data, mediaType, preview}
-  const [oHandImg, setOHandImg] = useState(null);
+  const [oHandL, setOHandL] = useState(null);
+  const [oHandR, setOHandR] = useState(null);
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [editingDomainHeader, setEditingDomainHeader] = useState(null);
   const [domainHeaderDraft, setDomainHeaderDraft] = useState({ name: "", emoji: "" });
@@ -652,26 +653,30 @@ strengths/cautionsは各3つ。`;
     reader.readAsDataURL(file);
   };
   const oGeneratePhysiognomy = async () => {
-    if (!oFaceImg && !oHandImg) { setOErr("顔または手のひらの写真を選んでください"); return; }
+    if (!oFaceImg && !oHandL && !oHandR) { setOErr("顔または手のひらの写真を選んでください"); return; }
     setOErr(""); setOLoading(true);
     const prev = oPhysio[0];
-    const images = [];
-    if (oFaceImg) images.push({ data: oFaceImg.data, mediaType: oFaceImg.mediaType });
-    if (oHandImg) images.push({ data: oHandImg.data, mediaType: oHandImg.mediaType });
-    const prompt = `あなたは観相学（顔相・手相）の熟練鑑定士です。${oFaceImg ? "顔写真" : ""}${oFaceImg && oHandImg ? "と" : ""}${oHandImg ? "手のひら写真" : ""}を読み解いてください。
+    const images = []; const labels = [];
+    if (oFaceImg) { images.push({ data: oFaceImg.data, mediaType: oFaceImg.mediaType }); labels.push("顔"); }
+    if (oHandL) { images.push({ data: oHandL.data, mediaType: oHandL.mediaType }); labels.push("左手のひら"); }
+    if (oHandR) { images.push({ data: oHandR.data, mediaType: oHandR.mediaType }); labels.push("右手のひら"); }
+    const hasFace = !!oFaceImg; const hasHand = !!(oHandL || oHandR);
+    const prompt = `あなたは観相学（顔相・手相）の熟練鑑定士です。添付画像を読み解いてください。
+画像は順に【${labels.join("→")}】です。
 ${oracleBase ? `この人の命式（参考）：${oracleBase.headline}／${(oracleBase.essence||[]).join("・")}` : ""}
 ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回からの変化があれば必ず指摘してください（観相学では相は心の状態を映し、変化します）。` : ""}
 
 【書き方】
 - 予言ではなく「今のあなたの状態が相にこう表れている」という自己理解の鏡として。
-- ${oFaceImg ? "顔相（表情の傾向・気の充実・対人面）" : ""}${oHandImg ? "／手相（生命線・知能線・感情線などの印象）" : ""}を具体的に。
-- 過度に断定せず、相が示す傾向として。250字程度。${prev ? "前回との変化を1文入れる。" : ""}
+- ${hasFace ? "顔相（表情の傾向・気の充実・対人面）。" : ""}${hasHand ? "手相（生命線・知能線・感情線などの印象）。" : ""}
+- ${(oHandL && oHandR) ? "左手は生まれ持った傾向、右手は現在の状態として、両手の違い（先天と後天のギャップ）も読んでください。" : ""}具体的に。
+- 過度に断定せず、相が示す傾向として。${(oHandL && oHandR) ? "300" : "250"}字程度。${prev ? "前回との変化を1文入れる。" : ""}
 プレーンテキストのみ。`;
     try {
-      const text = await oCallAPI(prompt, 1000, images);
-      const np = [{ date: todayStr(), text: text.trim(), hasFace: !!oFaceImg, hasHand: !!oHandImg, ts: Date.now() }, ...oPhysio];
+      const text = await oCallAPI(prompt, 1200, images);
+      const np = [{ date: todayStr(), text: text.trim(), hasFace, hasHand, ts: Date.now() }, ...oPhysio];
       patchOracle({ physiognomy: np });
-      setOFaceImg(null); setOHandImg(null);
+      setOFaceImg(null); setOHandL(null); setOHandR(null);
     } catch (e) { setOErr("生成に失敗しました。(" + e.message + ")"); }
     setOLoading(false);
   };
@@ -774,11 +779,13 @@ ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回�
 
     {oracleView === "physio" && oracleBase && (<div>
       <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.7, marginBottom: 14 }}>顔相・手相は心の状態を映し、ゆっくり変化します。節目ごとに撮ると<b style={{ color: T.textMuted }}>変化を追える</b>のが狙いです。正確に追うため、毎回<b style={{ color: T.textMuted }}>正面・無表情・明るい場所</b>で撮ってください。</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-        <div><div style={oLab}>顔写真（正面）</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOFaceImg)} style={{ fontSize: 11, color: T.textMuted }} />{oFaceImg && <img src={oFaceImg.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 160, objectFit: "cover" }} />}</div>
-        <div><div style={oLab}>手のひら写真</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOHandImg)} style={{ fontSize: 11, color: T.textMuted }} />{oHandImg && <img src={oHandImg.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 160, objectFit: "cover" }} />}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div><div style={oLab}>顔写真（正面）</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOFaceImg)} style={{ fontSize: 11, color: T.textMuted, width: "100%" }} />{oFaceImg && <img src={oFaceImg.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 140, objectFit: "cover" }} />}</div>
+        <div><div style={oLab}>左手のひら</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOHandL)} style={{ fontSize: 11, color: T.textMuted, width: "100%" }} />{oHandL && <img src={oHandL.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 140, objectFit: "cover" }} />}</div>
+        <div><div style={oLab}>右手のひら</div><input type="file" accept="image/*" onChange={e => oReadImage(e.target.files?.[0], setOHandR)} style={{ fontSize: 11, color: T.textMuted, width: "100%" }} />{oHandR && <img src={oHandR.preview} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 8, maxHeight: 140, objectFit: "cover" }} />}</div>
       </div>
-      <button onClick={oGeneratePhysiognomy} disabled={oLoading || (!oFaceImg && !oHandImg)} style={{ ...btnPrimary, opacity: (oLoading || (!oFaceImg && !oHandImg))?0.5:1 }}>{oLoading ? "読み解き中…" : "相を読む"}</button>
+      <div style={{ fontSize: 10, color: T.textDim, marginBottom: 10, lineHeight: 1.6 }}>左手＝生まれ持った傾向、右手＝現在の状態、として両手の違いも読み解きます。片手だけ・顔だけでもOKです。</div>
+      <button onClick={oGeneratePhysiognomy} disabled={oLoading || (!oFaceImg && !oHandL && !oHandR)} style={{ ...btnPrimary, opacity: (oLoading || (!oFaceImg && !oHandL && !oHandR))?0.5:1 }}>{oLoading ? "読み解き中…" : "相を読む"}</button>
       <div style={{ fontSize: 10, color: T.textDim, marginTop: 8 }}>※ 写真は読み解きに使うだけで保存しません。残るのは読み解き結果と日付だけです。</div>
       <div style={{ marginTop: 22 }}>{oPhysio.length === 0 && <div style={{ fontSize: 12, color: T.textDim }}>まだ記録がありません。</div>}{oPhysio.map((p,i) => <div key={i} style={{ background: T.surface, border: "1px solid "+T.border, borderRadius: 8, padding: "14px 16px", marginBottom: 10 }}><div style={{ fontSize: 10, color: T.textDim, marginBottom: 8, fontFamily: "var(--fm)" }}>{p.date}　{p.hasFace && "顔相"}{p.hasFace && p.hasHand && "・"}{p.hasHand && "手相"}{i === 0 && oPhysio.length > 1 && <span style={{ color: T.accent }}>　最新</span>}</div><div style={{ fontSize: 14, color: T.text, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>{p.text}</div></div>)}</div>
     </div>)}
