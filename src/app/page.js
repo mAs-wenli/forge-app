@@ -72,6 +72,9 @@ export default function ForgePage() {
   const [bestDayDraft, setBestDayDraft] = useState("");
   const [journalDraft, setJournalDraft] = useState("");
   const [visionCheckDraft, setVisionCheckDraft] = useState("");
+  const [beliefDraft, setBeliefDraft] = useState("");
+  const [voiceDraft, setVoiceDraft] = useState("");
+  const [showBeliefForge, setShowBeliefForge] = useState(false);
   const [historyDate, setHistoryDate] = useState(null);
   const [historyMonth, setHistoryMonth] = useState(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); });
   // ORACLE state
@@ -106,6 +109,7 @@ export default function ForgePage() {
     if (dl.top3) setTop3Draft(dl.top3.map(t => ({text: t.text, domainId: t.domainId || ""})).concat([{text:"",domainId:""},{text:"",domainId:""},{text:"",domainId:""}]).slice(0,3));
     else setTop3Draft([{text:"",domainId:""},{text:"",domainId:""},{text:"",domainId:""}]);
     setGratitudeDraft(dl.gratitude || ""); setMostImportantDraft(dl.mostImportant || ""); setBestDayDraft(dl.bestDay || ""); setJournalDraft(dl.journal || ""); setVisionCheckDraft(dl.visionCheck || "");
+    setBeliefDraft(dl.belief || ""); setVoiceDraft(dl.voice || ""); setShowBeliefForge(!!(dl.belief || dl.voice));
     setTodayPhase(dl.morningDone ? "day" : "morning");
     if (selectedDate === todayStr() && data.mirror?.dialogueHistory?.length > 0) {
       const latest = data.mirror.dialogueHistory[data.mirror.dialogueHistory.length - 1];
@@ -181,7 +185,7 @@ export default function ForgePage() {
   const completeEvening = () => {
     const nextDay = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
     setData(d => {
-      const log = { ...(d.forge.dailyLog || {}) }; const dayLog = { ...(log[selectedDate] || {}), journal: journalDraft, visionCheck: visionCheckDraft, eveningDone: true }; log[selectedDate] = dayLog;
+      const log = { ...(d.forge.dailyLog || {}) }; const dayLog = { ...(log[selectedDate] || {}), journal: journalDraft, visionCheck: visionCheckDraft, belief: beliefDraft, voice: voiceDraft, eveningDone: true }; log[selectedDate] = dayLog;
       if (dayLog.top3) { const undone = dayLog.top3.filter(t => t.status === "undone"); if (undone.length > 0) { log[nextDay] = { ...(log[nextDay] || {}), top3: [...((log[nextDay] || {}).top3 || []), ...undone.map((t, i) => ({ id: "carry" + (i+1), text: t.text, status: "undone", domainId: t.domainId || "" }))] }; } }
       return { ...d, forge: { ...d.forge, dailyLog: log } };
     });
@@ -200,8 +204,9 @@ export default function ForgePage() {
       const dl = getDailyLog(); const t3 = dl.top3 ? dl.top3.map(t => { const dom = getDomain(t.domainId); return "[" + t.status + "]" + (dom ? " [" + dom.name + "]" : "") + " " + t.text; }).join("\n") : "";
       const weekDates = getDailyLogDates().filter(d => d !== todayStr()).slice(0, 7);
       const weekCtx = weekDates.map(d => { const wdl = getDailyLog(d); if (!wdl.top3) return ""; return d + ": " + wdl.top3.map(t => (t.status === "done" ? "○" : t.status === "partial" ? "△" : "×")).join(" "); }).filter(Boolean).join("\n");
+      const beliefCtx = getDailyLogDates().map(d => { const bdl = getDailyLog(d); if (!bdl.belief && !bdl.voice) return ""; return d + ": " + [bdl.belief && ("信念=" + bdl.belief), bdl.voice && ("一言=" + bdl.voice)].filter(Boolean).join(" / "); }).filter(Boolean).slice(0, 8).join("\n");
       const res = await fetch("/api/mirror", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: "あなたはMIRRORの対話AIです。ユーザーのありのままを映す鏡。評価せず励まさず事実を映す。問いを投げかけ気づきを促す。\n\nコンテキスト:\n" + ctx + "\n\nログ:\n" + logs + "\n\nTop3:\n" + t3 + "\n\n過去7日:\n" + weekCtx + "\n\n2〜4文+1つの問い。",
+        body: JSON.stringify({ system: "あなたはMIRRORの対話AIです。ユーザーのありのままを映す鏡。評価せず励まさず事実を映す。問いを投げかけ気づきを促す。\n\nコンテキスト:\n" + ctx + "\n\nログ:\n" + logs + "\n\nTop3:\n" + t3 + "\n\n過去7日:\n" + weekCtx + (beliefCtx ? "\n\n言語化した信念:\n" + beliefCtx : "") + "\n\n2〜4文+1つの問い。",
           messages: newMsgs.map(m => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })) }) });
       const result = await res.json(); const finalMsgs = [...newMsgs, { role: "assistant", text: result.text || "接続エラー", time: timeNow() }];
       setMirrorMessages(finalMsgs); const hist = [...(data.mirror.dialogueHistory || [])]; const ti = hist.findIndex(h => h.date === todayStr());
@@ -225,7 +230,7 @@ export default function ForgePage() {
     const base = data?.oracle?.base; if (!base) return;
     const today = todayStr();
     const dl = (data?.forge?.dailyLog || {})[today] || {};
-    const txt = [dl.journal, dl.gratitude, dl.mostImportant, dl.bestDay, dl.visionCheck].filter(Boolean).join(" ");
+    const txt = [dl.journal, dl.gratitude, dl.mostImportant, dl.bestDay, dl.visionCheck, dl.belief, dl.voice].filter(Boolean).join(" ");
     if (!txt) return;
     if ((data?.oracle?.logs || []).some(l => l.date === today)) return; // 今日は生成済み
     if (oAutoRef.current === today) return; // 多重起動防止
@@ -441,11 +446,24 @@ export default function ForgePage() {
           {dl.top3 && dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, borderBottom: "1px solid " + T.border + "33" }}><span style={{ color: statusColors[task.status] }}>{statusIcons[task.status]}</span>{dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}<span style={{ color: task.status === "done" ? T.textDim : T.text }}>{task.text}</span></div>); })}
           {dl.journal && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 8, padding: "6px 10px", background: T.surface, borderRadius: 6, borderLeft: "2px solid " + T.evening }}><span style={{ color: T.evening, fontSize: 9, fontWeight: 600, marginRight: 6 }}>Journal</span>{dl.journal}</div>}
           {dl.visionCheck && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4, fontStyle: "italic" }}>{dl.visionCheck}</div>}
+          {dl.belief && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 8, padding: "6px 10px", background: T.tealDim, borderRadius: 6, borderLeft: "2px solid " + T.teal }}><span style={{ color: T.teal, fontSize: 9, fontWeight: 600, marginRight: 6 }}>信念</span>{dl.belief}</div>}
+          {dl.voice && <div style={{ fontSize: 11, color: T.text, marginTop: 4, padding: "6px 10px", background: T.tealDim, borderRadius: 6, borderLeft: "2px solid " + T.teal }}><span style={{ color: T.teal, fontSize: 9, fontWeight: 600, marginRight: 6 }}>ひと言</span>{dl.voice}</div>}
         </div>) : (<div>
           {dl.top3 && dl.top3.length > 0 && (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 10 }}>今日の Top 3 はどうでしたか？</div>{dl.top3.map((task, idx) => { const dom = getDomain(task.domainId); return (<div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: T.surface, border: "1px solid " + T.border, borderRadius: 6, marginBottom: 4 }}>{dom && <span style={{ fontSize: 10, color: dom.color }}>{dom.emoji}</span>}<span style={{ flex: 1, fontSize: 12, color: T.text }}>{task.text}</span><div style={{ display: "flex", gap: 4 }}>{["done","partial","undone"].map(s => (<button key={s} onClick={() => updateTop3Status(idx, s)} style={{ ...btnSm, fontSize: 13, padding: "3px 8px", color: task.status === s ? statusColors[s] : T.textDim, border: "1.5px solid " + (task.status === s ? statusColors[s] : T.border), background: task.status === s ? statusColors[s] + "15" : "transparent", borderRadius: 6 }}>{statusIcons[s]}</button>))}</div></div>); })}</div>)}
           {!dl.top3 && <div style={{ fontSize: 12, color: T.textDim, padding: 16, textAlign: "center" }}>Morning が未完了です</div>}
           <div style={{ marginBottom: 12 }}><div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 6 }}>今日気づいたこと・学び</div><textarea value={journalDraft} onChange={e => setJournalDraft(e.target.value)} rows={3} placeholder="ジャーナル..." style={{ ...inputBase, width: "100%", resize: "vertical", minHeight: 50 }} /></div>
           <div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", marginBottom: 6 }}>今日の積み重ねは、Visionに向かっていましたか？</div><input value={visionCheckDraft} onChange={e => setVisionCheckDraft(e.target.value)} placeholder="任意" style={{ ...inputBase, width: "100%" }} /></div>
+          <div style={{ marginBottom: 16, border: "1px solid " + T.teal + "33", borderRadius: 8, background: T.tealDim, overflow: "hidden" }}>
+            <div onClick={() => setShowBeliefForge(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", cursor: "pointer" }}>
+              <div><span style={{ fontSize: 12, fontWeight: 600, color: T.teal }}>◆ 信念の言語化</span><span style={{ fontSize: 10, color: T.textDim, marginLeft: 8 }}>週1でOK・任意</span></div>
+              <span style={{ fontSize: 12, color: T.textDim }}>{showBeliefForge ? "−" : "+"}</span>
+            </div>
+            {showBeliefForge && (<div style={{ padding: "0 14px 14px" }}>
+              <div style={{ fontSize: 12, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", lineHeight: 1.7, marginBottom: 12 }}>今日の体験から、ひとつだけ。毎日でなくていい。ピンと来た日に、体験を信念に変え、伝わる言葉にする。</div>
+              <div style={{ marginBottom: 12 }}><div style={{ fontSize: 12, color: T.teal, marginBottom: 6 }}>① この体験から言える、自分の信念は？<span style={{ color: T.textDim, marginLeft: 6, fontStyle: "italic" }}>体験→抽象</span></div><textarea value={beliefDraft} onChange={e => setBeliefDraft(e.target.value)} rows={2} placeholder="例：どんな相手でも、その人が自分の可能性を試せる場をつくりたい" style={{ ...inputBase, width: "100%", resize: "vertical", minHeight: 44 }} /></div>
+              <div><div style={{ fontSize: 12, color: T.teal, marginBottom: 6 }}>② それを、事情を知らない人にも伝わる一文にすると？<span style={{ color: T.textDim, marginLeft: 6, fontStyle: "italic" }}>軸は曲げず、表現だけ相手に合わせる</span></div><textarea value={voiceDraft} onChange={e => setVoiceDraft(e.target.value)} rows={2} placeholder="同じ信念を、初対面の人にひと言で。反射的に伝わる言葉に。" style={{ ...inputBase, width: "100%", resize: "vertical", minHeight: 44 }} /></div>
+            </div>)}
+          </div>
           {dl.top3 && dl.top3.filter(t => t.status === "undone").length > 0 && (<div style={{ fontSize: 11, color: T.textDim, marginBottom: 12, padding: "8px 12px", background: T.surface, borderRadius: 6, borderLeft: "2px solid " + T.morning }}><span style={{ color: T.morning, fontWeight: 600 }}>明日へ持越:</span> {dl.top3.filter(t => t.status === "undone").map(t => t.text).join(", ")}</div>)}
           <button onClick={completeEvening} style={{ ...btnPrimary, width: "100%" }}>Evening 完了 ✓</button>
         </div>)}
@@ -575,6 +593,7 @@ export default function ForgePage() {
         {sDl?.top3 && (<div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.morning, textTransform: "uppercase", marginBottom: 6 }}>Top 3</div>{sDl.top3.map(t => { const dom = getDomain(t.domainId); return (<div key={t.id} style={{ display: "flex", gap: 6, padding: "4px 0", fontSize: 12 }}><span style={{ color: statusColors[t.status] }}>{statusIcons[t.status]}</span>{dom && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: dom.color + "20", color: dom.color }}>{dom.emoji}</span>}<span style={{ color: t.status === "done" ? T.textDim : T.text }}>{t.text}</span></div>); })}</div>)}
         {sDl?.journal && (<div style={{ marginBottom: 12, padding: "8px 12px", background: T.surfaceAlt, borderRadius: 6, borderLeft: "2px solid " + T.evening }}><div style={{ fontSize: 10, fontWeight: 600, color: T.evening, textTransform: "uppercase", marginBottom: 4 }}>Journal</div><div style={{ fontSize: 12, color: T.text, lineHeight: 1.7, fontFamily: "var(--fc)" }}>{sDl.journal}</div></div>)}
         {sDl?.visionCheck && <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic", marginBottom: 12 }}>{sDl.visionCheck}</div>}
+        {(sDl?.belief || sDl?.voice) && (<div style={{ marginBottom: 12, padding: "8px 12px", background: T.tealDim, borderRadius: 6, borderLeft: "2px solid " + T.teal }}><div style={{ fontSize: 10, fontWeight: 600, color: T.teal, textTransform: "uppercase", marginBottom: 4 }}>信念の言語化</div>{sDl.belief && <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: sDl.voice ? 4 : 0 }}><span style={{ color: T.teal, fontWeight: 600, fontSize: 10, marginRight: 6 }}>信念</span>{sDl.belief}</div>}{sDl.voice && <div style={{ fontSize: 12, color: T.text, lineHeight: 1.7 }}><span style={{ color: T.teal, fontWeight: 600, fontSize: 10, marginRight: 6 }}>ひと言</span>{sDl.voice}</div>}</div>)}
         {sLogs.length > 0 && (<div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", marginBottom: 6 }}>行動ログ</div>{sLogs.map(l => (<div key={l.id} style={{ display: "flex", gap: 6, padding: "3px 0", fontSize: 11, borderBottom: "1px solid " + T.border + "33" }}><span style={{ fontSize: 9, fontFamily: "var(--fm)", color: T.textDim }}>{l.time}</span><span style={{ width: 4, height: 4, borderRadius: "50%", background: tagColors[l.tag] }} /><span style={{ color: T.text }}>{l.text}</span></div>))}</div>)}
         {sMirror?.messages?.length > 0 && (<div><div style={{ fontSize: 10, fontWeight: 600, color: T.teal, textTransform: "uppercase", marginBottom: 6 }}>Mirror 対話</div>{sMirror.messages.map((msg, i) => (<div key={i} style={{ padding: "4px 0", fontSize: 11, borderBottom: "1px solid " + T.border + "22" }}><span style={{ color: msg.role === "user" ? T.accent : T.teal, fontWeight: 500, marginRight: 6 }}>{msg.role === "user" ? "You" : "Mirror"}</span><span style={{ color: T.text, fontFamily: "var(--fc)" }}>{msg.text.length > 120 ? msg.text.slice(0,120) + "..." : msg.text}</span></div>))}</div>)}
       </div>)}
@@ -686,7 +705,7 @@ ${age != null ? `現在${age}歳。年齢は正確なので推測しないこと
     const allDates = Object.keys(dl).filter(dt => dt >= cutoffStr).sort(); // 古い順
     const total = allDates.length;
     const sampled = oSampleAcross(allDates, 45); // 期間全体から最大45件を均等抽出
-    const parts = sampled.map(dt => { const e = dl[dt]; const bits = []; if (e.journal) bits.push("振:" + e.journal); if (e.gratitude) bits.push("感謝:" + e.gratitude); if (e.mostImportant) bits.push("最重要:" + e.mostImportant); if (e.bestDay) bits.push("最高:" + e.bestDay); if (e.visionCheck) bits.push("確認:" + e.visionCheck); if (e.top3) bits.push("Top3:" + e.top3.map(t => t.text + "(" + (t.status||"") + ")").join("/")); return bits.length ? dt + " " + bits.join(" ") : null; }).filter(Boolean);
+    const parts = sampled.map(dt => { const e = dl[dt]; const bits = []; if (e.journal) bits.push("振:" + e.journal); if (e.gratitude) bits.push("感謝:" + e.gratitude); if (e.mostImportant) bits.push("最重要:" + e.mostImportant); if (e.bestDay) bits.push("最高:" + e.bestDay); if (e.visionCheck) bits.push("確認:" + e.visionCheck); if (e.belief) bits.push("信念:" + e.belief); if (e.voice) bits.push("一言:" + e.voice); if (e.top3) bits.push("Top3:" + e.top3.map(t => t.text + "(" + (t.status||"") + ")").join("/")); return bits.length ? dt + " " + bits.join(" ") : null; }).filter(Boolean);
     const ol = (data.oracle?.logs || []).filter(l => l.date >= cutoffStr).sort((a, b) => a.date.localeCompare(b.date));
     const oracleDaily = oSampleAcross(ol, 15).map(l => l.date + " " + l.reflection);
     return { parts, total, oracleDaily, olTotal: ol.length };
@@ -849,7 +868,7 @@ ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回�
     </div>)}
 
     {oracleView === "daily" && oracleBase && (<div>
-      {(() => { const t = todayStr(); const dl = getDailyLog(t); const src = [dl.journal, dl.gratitude, dl.mostImportant, dl.bestDay, dl.visionCheck].filter(Boolean).join(" "); const hasToday = (oracleLogs || []).some(l => l.date === t);
+      {(() => { const t = todayStr(); const dl = getDailyLog(t); const src = [dl.journal, dl.gratitude, dl.mostImportant, dl.bestDay, dl.visionCheck, dl.belief, dl.voice].filter(Boolean).join(" "); const hasToday = (oracleLogs || []).some(l => l.date === t);
         return (<div style={{ marginBottom: 14 }}>
           {src ? <div style={{ background: T.surfaceAlt, border: "1px solid "+T.border, borderRadius: 8, padding: "10px 14px", fontSize: 12, color: T.textMuted, lineHeight: 1.6 }}><span style={{ color: T.textDim }}>今日のTodayデータ：</span>{src}</div>
                : <div style={{ fontSize: 12, color: T.textDim }}>Todayタブで今日の振り返りを入れると、ここに型から見た解釈と明日の流れが自動で出ます。</div>}
