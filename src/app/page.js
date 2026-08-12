@@ -77,6 +77,11 @@ export default function ForgePage() {
   const [showBeliefForge, setShowBeliefForge] = useState(false);
   const [historyDate, setHistoryDate] = useState(null);
   const [historyMonth, setHistoryMonth] = useState(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); });
+  // MISSIONS state
+  const [newMission, setNewMission] = useState({ text: "", domainId: "" });
+  const [editingMissionId, setEditingMissionId] = useState(null);
+  const [missionEditDraft, setMissionEditDraft] = useState("");
+  const [showMissionPull, setShowMissionPull] = useState(false);
   // ORACLE state
   const [oracleView, setOracleView] = useState("base");
   const [oLoading, setOLoading] = useState(false);
@@ -128,6 +133,18 @@ export default function ForgePage() {
   const updateDomains = (updater) => setData(d => ({ ...d, forge: { ...d.forge, domains: typeof updater === "function" ? updater(d.forge.domains || []) : updater } }));
   const getActiveGoals = (domain) => (domain.goals || []).filter(g => g.status === "active");
   const getAchievedGoals = (domain) => (domain.goals || []).filter(g => g.status === "achieved");
+
+  // ── Missions (第2領域バックログ) ──
+  const getMissions = () => (data && data.forge.missions) || [];
+  const updateMissions = (updater) => setData(d => ({ ...d, forge: { ...d.forge, missions: typeof updater === "function" ? updater(d.forge.missions || []) : updater } }));
+  const addMission = () => { if (!newMission.text.trim()) return; updateMissions(ms => [...ms, { id: gid(), text: newMission.text.trim(), domainId: newMission.domainId || "", status: "todo", nextAction: "", due: "" }]); setNewMission({ text: "", domainId: "" }); };
+  const updateMission = (id, ups) => updateMissions(ms => ms.map(m => m.id === id ? { ...m, ...ups } : m));
+  const removeMission = (id) => updateMissions(ms => ms.filter(m => m.id !== id));
+  const MISSION_STATUS = { todo: { label: "未着手", color: T.textDim }, doing: { label: "進行中", color: T.accent }, waiting: { label: "待ち", color: T.morning }, done: { label: "完了", color: T.green } };
+  const cycleMissionStatus = (m) => { const order = ["todo","doing","waiting","done"]; const next = order[(order.indexOf(m.status || "todo") + 1) % order.length]; updateMission(m.id, { status: next }); };
+  const pullMissionToTop3 = (m) => { const text = (m.nextAction || m.text || "").trim(); if (!text) return; setTop3Draft(d => { const i = d.findIndex(t => !t.text.trim()); if (i === -1) return d; const nd = [...d]; nd[i] = { text, domainId: m.domainId || "" }; return nd; }); };
+  const SEED_MISSIONS = ["RX を完成させ使えるようにする","仕入請求アプリを完成させ使えるようにする","コックピットアプリ（全社分析ツール）を完成・公開する","WMSプロジェクトの骨子をまとめる","マスタ整備プロジェクトの骨子をまとめる","報酬制度プロジェクト発足の骨子をまとめる","今期の評価制度を整備する","プロジェクト報酬の仕組みをより明確にする","リクルートサイトを完成させアップする","中小企業診断士の学習推進と仕事のバリューアップを両立させる仕組みをつくる","ニッタでやっていることを整理・商品化しファーストクライアントを掴む"];
+  const seedMissions = () => updateMissions(ms => [...ms, ...SEED_MISSIONS.map(t => ({ id: gid(), text: t, domainId: "", status: "todo", nextAction: "", due: "" }))]);
 
   const startEdit = (f, v) => { setEditField(f); setTempText(v || ""); };
   const saveEdit = (field) => {
@@ -205,8 +222,9 @@ export default function ForgePage() {
       const weekDates = getDailyLogDates().filter(d => d !== todayStr()).slice(0, 7);
       const weekCtx = weekDates.map(d => { const wdl = getDailyLog(d); if (!wdl.top3) return ""; return d + ": " + wdl.top3.map(t => (t.status === "done" ? "○" : t.status === "partial" ? "△" : "×")).join(" "); }).filter(Boolean).join("\n");
       const beliefCtx = getDailyLogDates().map(d => { const bdl = getDailyLog(d); if (!bdl.belief && !bdl.voice) return ""; return d + ": " + [bdl.belief && ("信念=" + bdl.belief), bdl.voice && ("一言=" + bdl.voice)].filter(Boolean).join(" / "); }).filter(Boolean).slice(0, 8).join("\n");
+      const missionCtx = getMissions().filter(m => m.status !== "done").map(m => { const dom = getDomain(m.domainId); return "・" + (dom ? "[" + dom.name + "] " : "") + m.text + (m.nextAction ? "（次の一手: " + m.nextAction + "）" : "（次の一手:未設定）"); }).join("\n");
       const res = await fetch("/api/mirror", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: "あなたはMIRRORの対話AIです。ユーザーのありのままを映す鏡。評価せず励まさず事実を映す。問いを投げかけ気づきを促す。\n\nコンテキスト:\n" + ctx + "\n\nログ:\n" + logs + "\n\nTop3:\n" + t3 + "\n\n過去7日:\n" + weekCtx + (beliefCtx ? "\n\n言語化した信念:\n" + beliefCtx : "") + "\n\n2〜4文+1つの問い。",
+        body: JSON.stringify({ system: "あなたはMIRRORの対話AIです。ユーザーのありのままを映す鏡。評価せず励まさず事実を映す。問いを投げかけ気づきを促す。\n\nコンテキスト:\n" + ctx + "\n\nログ:\n" + logs + "\n\nTop3:\n" + t3 + "\n\n過去7日:\n" + weekCtx + (beliefCtx ? "\n\n言語化した信念:\n" + beliefCtx : "") + (missionCtx ? "\n\n第2領域ミッション(在庫):\n" + missionCtx : "") + "\n\n2〜4文+1つの問い。",
           messages: newMsgs.map(m => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })) }) });
       const result = await res.json(); const finalMsgs = [...newMsgs, { role: "assistant", text: result.text || "接続エラー", time: timeNow() }];
       setMirrorMessages(finalMsgs); const hist = [...(data.mirror.dialogueHistory || [])]; const ti = hist.findIndex(h => h.date === todayStr());
@@ -264,7 +282,7 @@ export default function ForgePage() {
 
   if (loading || !data) return (<div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ color: T.textMuted, fontSize: 14 }}>Loading...</div></div>);
 
-  const NAV = [{ id: "today", icon: "◉", label: "Today" }, { id: "foundation", icon: "△", label: "Foundation" }, { id: "mirror", icon: "◇", label: "Mirror" }, { id: "oracle", icon: "✷", label: "Oracle" }, { id: "history", icon: "◫", label: "History" }];
+  const NAV = [{ id: "today", icon: "◉", label: "Today" }, { id: "missions", icon: "◈", label: "Missions" }, { id: "foundation", icon: "△", label: "Foundation" }, { id: "mirror", icon: "◇", label: "Mirror" }, { id: "oracle", icon: "✷", label: "Oracle" }, { id: "history", icon: "◫", label: "History" }];
   const tagColors = { pure: T.teal, fear: T.coral, unknown: T.textDim };
   const tagLabels = { pure: "純粋", fear: "恐怖", unknown: "不明" };
   const statusIcons = { done: "○", partial: "△", undone: "×" }; const statusColors = { done: T.green, partial: T.morning, undone: T.red };
@@ -417,6 +435,23 @@ export default function ForgePage() {
           <div style={{ marginBottom: 12 }}><input value={mostImportantDraft} onChange={e => setMostImportantDraft(e.target.value)} placeholder="今日、一番大事な案件は何か？（任意）" style={{ ...inputBase, width: "100%", fontSize: 12 }} /></div>
           <div style={{ marginBottom: 12 }}><input value={bestDayDraft} onChange={e => setBestDayDraft(e.target.value)} placeholder="今日寝るとき「最高だった」と言えるには、何が起きればいい？（任意）" style={{ ...inputBase, width: "100%", fontSize: 12 }} /></div>
           <div style={{ fontSize: 13, color: T.textDim, fontFamily: "var(--fc)", fontStyle: "italic", lineHeight: 1.7, marginBottom: 14, padding: "10px 14px", background: T.morningDim, borderRadius: 8, border: "1px solid " + T.morning + "22" }}>この流れに今日1ミリでも近づくための、小さな行動を3つ。</div>
+          {(() => { const pool = getMissions().filter(m => m.status !== "done" && (m.nextAction || "").trim()); if (pool.length === 0) return null; return (
+            <div style={{ marginBottom: 12, border: "1px solid " + T.accent + "33", borderRadius: 8, background: T.accentDim, overflow: "hidden" }}>
+              <div onClick={() => setShowMissionPull(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 13px", cursor: "pointer" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.accent }}>◈ ミッションから引く<span style={{ fontSize: 10, color: T.textDim, fontWeight: 400, marginLeft: 8 }}>{pool.length}件の次の一手</span></span>
+                <span style={{ fontSize: 12, color: T.textDim }}>{showMissionPull ? "−" : "+"}</span>
+              </div>
+              {showMissionPull && (<div style={{ padding: "0 13px 12px", display: "flex", flexDirection: "column", gap: 5 }}>
+                {pool.map(m => { const dom = getDomain(m.domainId); const full = top3Draft.every(t => t.text.trim()); return (
+                  <button key={m.id} onClick={() => pullMissionToTop3(m)} disabled={full} title={m.text} style={{ ...btnSm, textAlign: "left", padding: "6px 10px", borderRadius: 6, border: "1px solid " + T.border, background: T.surface, color: T.text, fontSize: 12, opacity: full ? 0.4 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+                    {dom && <span style={{ fontSize: 9, color: dom.color, flexShrink: 0 }}>{dom.emoji}</span>}
+                    <span style={{ color: T.morning, flexShrink: 0 }}>★</span>
+                    <span style={{ flex: 1 }}>{m.nextAction}</span>
+                    <span style={{ fontSize: 9, color: T.accent, flexShrink: 0 }}>＋Top3</span>
+                  </button>); })}
+                <div style={{ fontSize: 9, color: T.textDim, marginTop: 2 }}>タップで空いているTop3枠に入ります。詳細は Missions タブで。</div>
+              </div>)}
+            </div>); })()}
           {[0,1,2].map(i => (<div key={i} style={{ marginBottom: 10 }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 14, fontWeight: 600, color: T.morning, fontFamily: "var(--fm)", width: 20, textAlign: "center", flexShrink: 0 }}>{i+1}</span><input value={top3Draft[i].text} onChange={e => { const d = [...top3Draft]; d[i] = { ...d[i], text: e.target.value }; setTop3Draft(d); }} placeholder={i === 2 ? "（任意）" : "タスクを入力..."} style={{ ...inputBase, flex: 1 }} /></div><div style={{ marginLeft: 28 }}>{renderDomainPills(top3Draft[i].domainId, (id) => { const d = [...top3Draft]; d[i] = { ...d[i], domainId: id }; setTop3Draft(d); })}</div></div>))}
           <button onClick={completeMorning} disabled={!top3Draft[0].text.trim()} style={{ ...btnPrimary, width: "100%", marginTop: 8, opacity: top3Draft[0].text.trim() ? 1 : 0.4 }}>Morning 完了 ✓</button>
         </div>)}
@@ -469,6 +504,58 @@ export default function ForgePage() {
         </div>)}
       </div>)}
       {getDailyLogDates().filter(d => d !== todayStr()).length > 0 && (<div onClick={() => setSection("history")} style={{ marginTop: 20, textAlign: "center", padding: "10px 0", cursor: "pointer", color: T.textDim, fontSize: 11 }}>過去の記録を見る →</div>)}
+    </div>);
+  };
+
+  // ═══════ MISSIONS ═══════
+  const MissionsView = () => {
+    const missions = getMissions();
+    const groups = [...domains.map(d => ({ id: d.id, name: d.name, emoji: d.emoji, color: d.color })), { id: "", name: "未分類", emoji: "◇", color: T.textDim }];
+    const openCount = missions.filter(m => m.status !== "done").length;
+    return (<div>
+      <div style={{ marginBottom: 20 }}><h1 style={{ fontSize: 26, fontWeight: 400, color: T.text, fontFamily: "var(--fc)", margin: 0 }}>Missions</h1><div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>第2領域（緊急でないが重要）の在庫。日々は「次の一手」だけ見る。週1で棚卸し。</div></div>
+
+      <div style={{ fontSize: 11, color: T.textDim, marginBottom: 14, padding: "10px 14px", background: T.morningDim, borderRadius: 8, border: "1px solid " + T.morning + "22", lineHeight: 1.7 }}>各ミッションに常に<span style={{ color: T.morning, fontWeight: 600 }}>「★次の一手」（座って15〜60分で動ける具体行動）</span>を1つ埋めておく。毎朝そこから1〜3個をTop3に引く。<span style={{ color: T.textMuted }}>作り込むより、埋めて動くこと。</span></div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+        <input value={newMission.text} onChange={e => setNewMission(p => ({ ...p, text: e.target.value }))} placeholder="ミッションを追加..." style={{ ...inputBase, flex: 1 }} onKeyDown={e => e.key === "Enter" && addMission()} />
+        <button onClick={addMission} disabled={!newMission.text.trim()} style={{ ...btnPrimary, opacity: newMission.text.trim() ? 1 : 0.4 }}>追加</button>
+      </div>
+
+      {missions.length === 0 && (<div style={{ textAlign: "center", padding: "30px 16px", color: T.textDim }}>
+        <div style={{ fontSize: 12, marginBottom: 14 }}>まだミッションがありません。</div>
+        <button onClick={seedMissions} style={{ ...btnPrimary, background: T.teal }}>11ミッションを読み込む</button>
+        <div style={{ fontSize: 10, color: T.textDim, marginTop: 8 }}>先日書き出した第2領域の一覧を一括で入れます。後から編集・削除できます。</div>
+      </div>)}
+
+      {missions.length > 0 && groups.map(g => {
+        const knownIds = domains.map(d => d.id);
+        const list = g.id ? missions.filter(m => m.domainId === g.id) : missions.filter(m => !m.domainId || !knownIds.includes(m.domainId));
+        if (list.length === 0) return null;
+        return (<div key={g.id || "none"} style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: g.color, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{g.emoji} {g.name}<span style={{ color: T.textDim, marginLeft: 8 }}>{list.filter(m => m.status !== "done").length}件</span></div>
+          {list.map(m => { const st = MISSION_STATUS[m.status || "todo"]; const isEditing = editingMissionId === m.id; const isDone = m.status === "done"; return (
+            <div key={m.id} style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "10px 12px", marginBottom: 6, opacity: isDone ? 0.55 : 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <button onClick={() => cycleMissionStatus(m)} title="状態を切替" style={{ ...btnSm, fontSize: 9, padding: "2px 8px", borderRadius: 10, color: st.color, border: "1px solid " + st.color + "60", background: st.color + "15", flexShrink: 0 }}>{st.label}</button>
+                {isEditing ? (<input value={missionEditDraft} onChange={e => setMissionEditDraft(e.target.value)} autoFocus onBlur={() => { if (missionEditDraft.trim()) updateMission(m.id, { text: missionEditDraft.trim() }); setEditingMissionId(null); }} onKeyDown={e => { if (e.key === "Enter") { if (missionEditDraft.trim()) updateMission(m.id, { text: missionEditDraft.trim() }); setEditingMissionId(null); } }} style={{ ...inputBase, flex: 1, padding: "4px 8px" }} />)
+                  : (<span onClick={() => { setEditingMissionId(m.id); setMissionEditDraft(m.text); }} style={{ flex: 1, fontSize: 13, color: T.text, cursor: "pointer", textDecoration: isDone ? "line-through" : "none" }}>{m.text}</span>)}
+                <button onClick={() => removeMission(m.id)} title="削除" style={{ ...btnSm, color: T.textDim, fontSize: 12, flexShrink: 0 }}>×</button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: T.morning, flexShrink: 0 }}>★</span>
+                <input value={m.nextAction || ""} onChange={e => updateMission(m.id, { nextAction: e.target.value })} placeholder="次の一手（15〜60分で動ける具体行動）..." style={{ ...inputBase, flex: 1, fontSize: 12 }} />
+                <input value={m.due || ""} onChange={e => updateMission(m.id, { due: e.target.value })} placeholder="期限" style={{ ...inputBase, width: 72, fontSize: 11, textAlign: "center", flexShrink: 0 }} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                {renderDomainPills(m.domainId, (id) => updateMission(m.id, { domainId: id }))}
+                {!isDone && (m.nextAction || "").trim() && <button onClick={() => { pullMissionToTop3(m); setSection("today"); setTodayPhase("morning"); }} title="今日のTop3に引く" style={{ ...btnSm, fontSize: 10, color: T.accent, border: "1px solid " + T.accent + "50", borderRadius: 6, padding: "3px 8px", flexShrink: 0, marginLeft: "auto" }}>→ Top3</button>}
+              </div>
+            </div>); })}
+        </div>);
+      })}
+
+      {missions.length > 0 && <div style={{ fontSize: 10, color: T.textDim, textAlign: "center", marginTop: 10 }}>未完了 {openCount} 件</div>}
     </div>);
   };
 
@@ -917,7 +1004,7 @@ ${prev ? `【前回の相（${prev.date}）】${prev.text}\n→ 今回、前回�
   const navItem = (n) => (<div key={n.id} onClick={() => setSection(n.id)} title={n.label} style={{ width: 38, height: 38, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", background: section === n.id ? T.accentDim : "transparent", color: section === n.id ? T.accent : T.textDim, fontSize: 14 }}><span>{n.icon}</span><span style={{ fontSize: 7, marginTop: 1 }}>{n.label}</span></div>);
   return (<div className="forge-shell">
     <nav className="forge-sidebar"><div style={{ fontSize: 18, marginBottom: 16, color: T.accent, fontWeight: 600, fontFamily: "var(--fc)" }}>F</div>{NAV.map(navItem)}<div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}><div style={{ fontSize: 7, color: saveStatus === "saved" ? T.green : saveStatus === "saving" ? T.morning : saveStatus === "error" ? T.red : "transparent", textAlign: "center", lineHeight: 1.2 }}>{saveStatus === "saved" ? "保存済✓" : saveStatus === "saving" ? "保存中" : saveStatus === "error" ? "失敗" : "　"}</div><button onClick={logout} title="ログアウト" style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 10, padding: 4 }}>↩</button></div></nav>
-    <main className="forge-main">{section === "today" && TodayView()}{section === "foundation" && FoundationView()}{section === "mirror" && MirrorView()}{section === "oracle" && OracleView()}{section === "history" && HistoryView()}</main>
+    <main className="forge-main">{section === "today" && TodayView()}{section === "missions" && MissionsView()}{section === "foundation" && FoundationView()}{section === "mirror" && MirrorView()}{section === "oracle" && OracleView()}{section === "history" && HistoryView()}</main>
     <nav className="forge-bottomnav">{NAV.map(n => (<div key={n.id} onClick={() => setSection(n.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px", cursor: "pointer", color: section === n.id ? T.accent : T.textDim }}><span style={{ fontSize: 18 }}>{n.icon}</span><span style={{ fontSize: 9 }}>{n.label}</span></div>))}</nav>
   </div>);
 }

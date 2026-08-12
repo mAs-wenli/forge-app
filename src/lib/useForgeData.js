@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase-browser";
 const defaultForge = {
   northStar: "", reasonForBeing: "", values: "",
   antiVision: "", vision: "", identity: "",
-  visionHistory: [], actionLog: [],
+  visionHistory: [], actionLog: [], missions: [],
   patternInterrupts: [
     { id: "pi1", time: "11:00", question: "今やっていることで私は何を避けている？" },
     { id: "pi2", time: "15:00", question: "この行動は最悪な未来に向かっている？理想の未来に向かっている？" },
@@ -54,6 +54,7 @@ export function useForgeData() {
           if (!d.mirror) d.mirror = defaultMirror;
           if (!d.forge.dailyLog) d.forge.dailyLog = {};
           if (!d.forge.patternInterrupts) d.forge.patternInterrupts = defaultForge.patternInterrupts;
+          if (!d.forge.missions) d.forge.missions = [];
           if (!d.oracle) d.oracle = null; // ORACLE: 追加フィールド（既存データは不変）
           // Migrate: create domains array if missing
           if (!d.forge.domains) {
